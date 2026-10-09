@@ -55,12 +55,13 @@ class BaseListScreen(Screen):
         self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions", "InfoActions"],
+            ["OkCancelActions", "ColorActions", "InfoActions", "EPGActions"],
             {
                 "ok": self.on_select,
                 "cancel": self.close,
                 "red": self.on_red,
                 "info": self.on_info,
+                "epg": self.on_info,
             },
         )
         self.onLayoutFinish.append(self._load)
