@@ -7,13 +7,13 @@ from Screens.MessageBox import MessageBox
 from Components.Label import Label
 from Components.Sources.List import List
 from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaBlend
-from enigma import eTimer, gFont, RT_HALIGN_LEFT, RT_VALIGN_CENTER, loadPixmap
+from enigma import eTimer, RT_HALIGN_LEFT, RT_VALIGN_CENTER
+from Tools.LoadPixmap import LoadPixmap
 
 from .screens_base import BaseListScreen
 from . import player as vlc_player
 from . import recorder
 from . import picon
-from . import theme
 
 
 def _b64(s):
@@ -51,8 +51,6 @@ class LiveListScreen(BaseListScreen):
         self["list"] = List([])
 
         self["epg"] = Label()
-
-        self._font = gFont("Regular", theme.font(22))
 
         # Debounce-Timer: Vorschau erst nach kurzem Verharren auf einem Sender.
         self._preview_timer = eTimer()
@@ -111,14 +109,14 @@ class LiveListScreen(BaseListScreen):
         logo = picon.logo_path(sid)
         if logo:
             try:
-                pix = loadPixmap(logo)
+                pix = LoadPixmap(logo)
                 if pix:
                     res.append(MultiContentEntryPixmapAlphaBlend(
                         pos=(6, 5), size=(32, 32), png=pix))
             except Exception:
                 pass
         res.append(MultiContentEntryText(
-            pos=(48, 2), size=(700, 34), font=self._font,
+            pos=(48, 2), size=(700, 34), font=0,
             flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=name))
         return res
 
