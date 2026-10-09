@@ -14,6 +14,20 @@ def main(session, **kwargs):
     session.open(MainMenuScreen)
 
 
+def sessionstart(reason, session=None, **kwargs):
+    """Beim Sessionstart den Timer-Scheduler initialisieren.
+
+    Lädt persistierte Timer-Aufnahmen und startet den 30s-Poll — so laufen
+    geplante Aufnahmen auch, wenn der Player nicht geöffnet ist.
+    """
+    if reason == 0:
+        try:
+            from . import recorder
+            recorder.get_scheduler()
+        except Exception:
+            pass
+
+
 def Plugins(**kwargs):
     import os
     _icon = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -28,5 +42,6 @@ def Plugins(**kwargs):
             ],
             fnc=main,
             icon=_icon,
+            sessionstart=sessionstart,
         )
     ]

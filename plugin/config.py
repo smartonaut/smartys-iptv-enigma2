@@ -14,6 +14,14 @@ import secrets
 CONFIG_DIR = "/etc/enigma2"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "smartysiptv.json")
 
+# Standardwerte für die einstellbaren Optionen (werden beim Laden ergänzt).
+DEFAULTS = {
+    "rec_dir": "/media/hdd/movie",
+    "timeshift": True,
+    "confirm_switch": True,
+    "preview": True,
+}
+
 _PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
 
 
@@ -28,6 +36,9 @@ class Config(object):
                 self._data = json.load(f)
         except (IOError, ValueError):
             self._data = {}
+        # Fehlende Optionen mit Standardwerten auffüllen.
+        for k, v in DEFAULTS.items():
+            self._data.setdefault(k, v)
         return self
 
     def save(self):

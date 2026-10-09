@@ -39,7 +39,8 @@ class MainMenuScreen(Screen):
             (_("Live-TV"), self.open_live),
             (_("Filme (VOD)"), self.open_vod),
             (_("Serien"), self.open_series),
-            (_("Einstellungen / Pairing"), self.open_settings),
+            (_("Einstellungen"), self.open_prefs),
+            (_("Pairing"), self.open_settings),
         ]
         self["list"].setList([(label, fnc) for label, fnc in entries])
         self["status"].setText(
@@ -74,3 +75,7 @@ class MainMenuScreen(Screen):
     def open_settings(self):
         from .pairing import PairingScreen
         self.session.open(PairingScreen)
+
+    def open_prefs(self):
+        from .settings import SettingsScreen
+        self.session.open(SettingsScreen)

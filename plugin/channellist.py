@@ -46,6 +46,12 @@ class LiveListScreen(BaseListScreen):
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
+        # Vorschau (PIP) aus den Einstellungen lesen, bevor der Skin gebaut wird.
+        try:
+            from .config import Config
+            self.preview = bool(Config().load().get("preview", True))
+        except Exception:
+            self.preview = True
         super().__init__(session, cfg, category_id, header_text, subtitle_text)
 
         self["epg"] = Label()

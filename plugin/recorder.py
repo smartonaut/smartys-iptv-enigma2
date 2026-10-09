@@ -12,6 +12,7 @@ import os
 import subprocess
 import time
 import base64
+import json
 
 try:
     from enigma import eTimer
@@ -22,8 +23,17 @@ USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/145.0.0.0 Safari/537.36")
 
-# Aufnahme-Verzeichnis (Enigma2-Standard)
+# Aufnahme-Verzeichnis (Standard; überschreibbar in den Einstellungen)
 REC_DIR = "/media/hdd/movie"
+
+
+def _rec_dir():
+    """Aktuelles Aufnahme-Verzeichnis aus den Einstellungen."""
+    try:
+        from .config import Config
+        return Config().load().get("rec_dir", REC_DIR)
+    except Exception:
+        return REC_DIR
 
 
 class Recorder(object):
@@ -52,9 +62,10 @@ class Recorder(object):
         # Zeitstempel für eindeutigen Dateinamen
         import datetime
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(REC_DIR, "%s_%s.ts" % (safe, ts))
-        if not os.path.isdir(REC_DIR):
-            os.makedirs(REC_DIR, exist_ok=True)
+        rdir = _rec_dir()
+        path = os.path.join(rdir, "%s_%s.ts" % (safe, ts))
+        if not os.path.isdir(rdir):
+            os.makedirs(rdir, exist_ok=True)
         cmd = [
             "ffmpeg", "-y",
             "-user_agent", USER_AGENT,
@@ -123,14 +134,19 @@ def get_recorder():
     return _recorder
 
 
+TIMERS_FILE = "/etc/enigma2/smartysiptv_timers.json"
+
+
 class TimerScheduler(object):
     """Geplante (Timer-)Aufnahmen: startet/stoppt ffmpeg zur eingetragenen Zeit.
 
     Ein eTimer prüft alle 30 Sekunden, ob eine geplante Aufnahme fällig ist.
+    Die Timer werden in einer JSON-Datei persistiert und überleben so
+    Enigma2-Neustarts; der Scheduler läuft unabhängig vom Player.
     """
 
     def __init__(self):
-        self.timers = []  # dicts: url, name, start, end, proc
+        self.timers = self._load()  # dicts: url, name, start, end, proc, done
         self._timer = None
         if eTimer is not None:
             self._timer = eTimer()
@@ -138,6 +154,39 @@ class TimerScheduler(object):
                 self._timer.callback.append(self._check)
             except Exception:
                 self._timer.timeout.connect(self._check)
+        # Timer sofort aufnehmen, falls schon etwas fällig ist.
+        self._ensure_running()
+
+    def _load(self):
+        now = int(time.time())
+        out = []
+        try:
+            if os.path.exists(TIMERS_FILE):
+                with open(TIMERS_FILE, "r") as f:
+                    data = json.load(f)
+                for t in data:
+                    try:
+                        if int(t["end"]) > now:
+                            out.append({
+                                "url": t["url"], "name": t["name"],
+                                "start": int(t["start"]), "end": int(t["end"]),
+                                "proc": None, "done": False,
+                            })
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return out
+
+    def _save(self):
+        try:
+            data = [{"url": t["url"], "name": t["name"],
+                     "start": t["start"], "end": t["end"]}
+                    for t in self.timers if not t["done"]]
+            with open(TIMERS_FILE, "w") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
 
     def schedule(self, url, name, start_ts, end_ts):
         """Plant eine Aufnahme (Unix-Timestamps). Liefert die Timer-ID (dict)."""
@@ -147,6 +196,7 @@ class TimerScheduler(object):
             "proc": None, "done": False,
         }
         self.timers.append(entry)
+        self._save()
         self._ensure_running()
         return entry
 
@@ -175,9 +225,10 @@ class TimerScheduler(object):
                     safe = "recording"
                 import datetime
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                path = os.path.join(REC_DIR, "%s_%s.ts" % (safe, ts))
-                if not os.path.isdir(REC_DIR):
-                    os.makedirs(REC_DIR, exist_ok=True)
+                rdir = _rec_dir()
+                path = os.path.join(rdir, "%s_%s.ts" % (safe, ts))
+                if not os.path.isdir(rdir):
+                    os.makedirs(rdir, exist_ok=True)
                 cmd = ["ffmpeg", "-y", "-user_agent", USER_AGENT,
                        "-i", t["url"], "-c", "copy", "-f", "mpegts", path]
                 try:
@@ -202,6 +253,7 @@ class TimerScheduler(object):
                 t["done"] = True
                 changed = True
         if changed:
+            self._save()
             self._ensure_running()
 
     def cancel(self, entry):
@@ -211,6 +263,7 @@ class TimerScheduler(object):
             except Exception:
                 pass
         entry["done"] = True
+        self._save()
 
 
 _scheduler = None

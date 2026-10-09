@@ -1,0 +1,68 @@
+# -*- coding: utf-8 -*-
+"""Smartys IPTV — Einstellungsmenü."""
+
+from Screens.Screen import Screen
+from Components.ActionMap import ActionMap
+from Components.MenuList import MenuList
+
+from . import theme
+from .config import Config
+
+
+# (config-key, Anzeigename) — Boolean-Optionen, die mit OK getoggelt werden.
+OPTIONS = [
+    ("timeshift", "Timeshift (Pause = automatische Aufnahme)"),
+    ("confirm_switch", "Umschalt-Schutz (Abfrage bei laufender Aufnahme)"),
+    ("preview", "Vorschau (PIP) in der Senderliste"),
+]
+
+
+class SettingsScreen(Screen):
+    def __init__(self, session):
+        Screen.__init__(self, session)
+        self.session = session
+        self.cfg = Config().load()
+
+        self.skin = theme.build_skin(
+            "SmartysSettings", logo=True,
+            footer="OK = Ändern   ·   EXIT = Zurück")
+
+        self["list"] = MenuList([])
+
+        self["actions"] = ActionMap(
+            ["OkCancelActions"],
+            {
+                "ok": self._toggle,
+                "cancel": self.close,
+            },
+        )
+
+        self._rebuild()
+
+    def _rebuild(self):
+        entries = []
+        for key, label in OPTIONS:
+            val = bool(self.cfg.get(key, False))
+            entries.append((self._fmt(label, val), key))
+        # Aufnahme-Verzeichnis (nur Anzeige).
+        rec_dir = self.cfg.get("rec_dir", "/media/hdd/movie")
+        entries.append((self._dir_label(rec_dir), None))
+        self["list"].setList(entries)
+
+    def _fmt(self, label, val):
+        state = "AN" if val else "AUS"
+        return "%s   [%s]" % (label, state)
+
+    def _dir_label(self, d):
+        return "Aufnahme-Verzeichnis: %s" % d
+
+    def _toggle(self):
+        cur = self["list"].getCurrent()
+        if not cur:
+            return
+        key = cur[1]
+        if key is None:
+            return  # Verzeichnis-Zeile ist nicht schaltbar
+        val = bool(self.cfg.get(key, False))
+        self.cfg.set(key, not val)
+        self._rebuild()

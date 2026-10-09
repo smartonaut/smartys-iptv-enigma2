@@ -25,6 +25,15 @@ from . import theme
 from . import recorder
 
 
+def _cfg(key, default):
+    """Liest eine Einstellung (mit Fallback)."""
+    try:
+        from .config import Config
+        return Config().load().get(key, default)
+    except Exception:
+        return default
+
+
 class StreamPlayerScreen(InfoBarBase, Screen):
     """Vollbild-Player für einen IPTV-Stream, mit EPG-Infobar."""
 
@@ -246,6 +255,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     def toggle_timeshift(self):
         """PAUSE = Aufnahme in den Buffer starten; nochmal = Buffer abspielen."""
+        if not _cfg("timeshift", True):
+            return
         if self._timeshift_proc is None:
             self._start_timeshift()
         else:
@@ -318,6 +329,12 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         rec = recorder.get_recorder()
         has_rec = rec.recording
         has_ts = self._timeshift_proc is not None
+        # Umschalt-Schutz deaktiviert? Dann direkt beenden.
+        if not _cfg("confirm_switch", True):
+            if has_rec:
+                rec.stop()
+            self.quit()
+            return
         if not has_rec and not has_ts:
             self.quit()
             return
