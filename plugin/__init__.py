@@ -1,26 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Enigma2-Plugin (Einstiegspunkt)."""
+"""Smartys IPTV — Plugin-Paket.
 
-from __future__ import absolute_import
-
-from Components.PluginComponent import plugins
-from Plugins.Plugin import PluginDescriptor
-
-
-def main(session, **kwargs):
-    from .mainmenu import MainMenuScreen
-    session.open(MainMenuScreen)
-
-
-def Plugins(**kwargs):
-    return [
-        PluginDescriptor(
-            name="Smartys IPTV",
-            description="IPTV-Player für Smartys (Live-TV, Filme, Serien)",
-            where=[
-                PluginDescriptor.WHERE_PLUGINMENU,
-                PluginDescriptor.WHERE_EXTENSIONSMENU,
-            ],
-            fnc=main,
-        )
-    ]
+Der Einstiegspunkt liegt in plugin.py (Enigma2 importiert dieses Modul).
+Dieses __init__.py bleibt bewusst leer, um keinen Konflikt mit plugin.py
+zu verursachen.
+"""

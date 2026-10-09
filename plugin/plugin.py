@@ -15,11 +15,7 @@ def main(session, **kwargs):
 
 
 def sessionstart(reason, session=None, **kwargs):
-    """Beim Sessionstart den Timer-Scheduler initialisieren.
-
-    Lädt persistierte Timer-Aufnahmen und startet den 30s-Poll — so laufen
-    geplante Aufnahmen auch, wenn der Player nicht geöffnet ist.
-    """
+    """Beim Start den Timer-Scheduler initialisieren (persistierte Timer laden)."""
     if reason == 0:
         try:
             from . import recorder
@@ -30,23 +26,34 @@ def sessionstart(reason, session=None, **kwargs):
 
 def Plugins(**kwargs):
     import os
-    _icon = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "images", "logo.png")
-    return [
+    icon_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "images", "logo.png")
+    result = [
+        # Plugin-Menü (Hauptmenü -> Erweiterungen/Plugins)
         PluginDescriptor(
             name="Smartys IPTV",
             description="IPTV-Player für Smartys (Live-TV, Filme, Serien)",
-            where=[
-                PluginDescriptor.WHERE_PLUGINMENU,
-                PluginDescriptor.WHERE_EXTENSIONSMENU,
-            ],
+            where=PluginDescriptor.WHERE_PLUGINMENU,
+            icon=icon_file,
             fnc=main,
-            icon=_icon,
+            needsRestart=True,
         ),
-        # Autostart: Timer-Scheduler beim Enigma2-Start initialisieren.
+        # Erweiterungs-Browser (grüne Taste)
+        PluginDescriptor(
+            name="Smartys IPTV",
+            description="IPTV-Player für Smartys (Live-TV, Filme, Serien)",
+            where=PluginDescriptor.WHERE_EXTENSIONSMENU,
+            icon=icon_file,
+            fnc=main,
+            needsRestart=True,
+        ),
+        # Autostart/Sessionstart: Timer-Scheduler beim Start initialisieren
         PluginDescriptor(
             name="Smartys IPTV (Autostart)",
-            where=[PluginDescriptor.WHERE_AUTOSTART],
+            where=[PluginDescriptor.WHERE_AUTOSTART,
+                   PluginDescriptor.WHERE_SESSIONSTART],
             fnc=sessionstart,
+            needsRestart=True,
         ),
     ]
+    return result
