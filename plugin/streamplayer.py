@@ -15,7 +15,7 @@ from enigma import eServiceReference
 from . import theme
 
 
-class StreamPlayerScreen(Screen):
+class StreamPlayerScreen(InfoBarBase, Screen):
     """Vollbild-Player für einen IPTV-Stream."""
 
     def __init__(self, session, url, servicetype=4097, name=""):
