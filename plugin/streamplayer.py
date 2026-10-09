@@ -63,8 +63,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             'zPosition="4"/>'
             '</screen>' % (
                 w, h,
-                # Infobar-Hintergrund: unten, volle Breite
-                0, theme.scale_y(600), w, theme.scale_y(120),
+                # Infobar-Hintergrund: unten, volle Breite (position="0,%d")
+                theme.scale_y(600), w, theme.scale_y(120),
                 # nowchannel
                 theme.scale(48), theme.scale_y(612), theme.scale(800),
                 theme.scale_y(44), theme.font(26),
