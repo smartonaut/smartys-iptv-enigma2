@@ -21,5 +21,4 @@ class VodListScreen(BaseListScreen):
         stream_id = item.get("stream_id")
         ext = item.get("container_extension") or "mp4"
         url = self.api.creds.movie_url(stream_id, ext)
-        if vlc_player.play(self.session, url):
-            self.close()
+        vlc_player.open_player(self.session, url)

@@ -57,5 +57,4 @@ class EpisodeListScreen(BaseListScreen):
         ep_id = item.get("id")
         ext = item.get("container_extension") or "mp4"
         url = self.api.creds.series_url(ep_id, ext)
-        if vlc_player.play(self.session, url):
-            self.close()
+        vlc_player.open_player(self.session, url)

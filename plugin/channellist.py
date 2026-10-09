@@ -33,9 +33,11 @@ class LiveListScreen(BaseListScreen):
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
         url = self.api.creds.stream_url(stream_id, "ts")
-        if vlc_player.play(self.session, url):
-            # Vollbild: Screen schließen, damit Enigma2 das Video zeigt.
-            self.close()
+        self._open_player(url)
+
+    def _open_player(self, url):
+        """Vollbild: StreamPlayer-Screen öffnen (rendert das Video)."""
+        vlc_player.open_player(self.session, url)
 
     def _on_selection_changed(self):
         # Vorschau verzögert starten, damit schnelles Scrollen nicht ruckelt.
@@ -49,7 +51,7 @@ class LiveListScreen(BaseListScreen):
         ch = sel[1]
         stream_id = ch.get("stream_id")
         url = self.api.creds.stream_url(stream_id, "ts")
-        vlc_player.play(self.session, url)
+        vlc_player.play_service(self.session, url)
 
     def on_red(self):
         """ROT = Aufnahme starten/stoppen für den markierten Sender."""
