@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 """Smartys IPTV — Stream-Player-Screen (nach XStreamity-Vorbild).
 
-Öffnet einen eigenen Screen, der InfoBarBase erbt und das Video über
-session.nav.playService abspielt. Der Screen bleibt offen und rendert
-das Video im Vollbild — exakt wie XStreamity_StreamPlayer.
-
-Servicetype 4097 = GStreamer (eingebaut), 5002 = exteplayer3 (serviceapp).
+Das Video wird über den Hardware-Decoder gerendert (session.nav.playService).
+Dieser Screen legt nur ein transparentes OSD darüber (Infobar), damit das
+Video durchscheint — exakt wie XStreamity_StreamPlayer. Kein eigenes
+Video-Decoding; der Player ist exteplayer3/GStreamer (ffmpeg, OpenSource).
 """
 
 from Screens.Screen import Screen
-from Screens.InfoBarGenerics import InfoBarBase
+from Components.ServiceEventTracker import InfoBarBase
 from Components.ActionMap import ActionMap
 from enigma import eServiceReference
+
+from . import theme
 
 
 class StreamPlayerScreen(Screen):
@@ -23,7 +24,16 @@ class StreamPlayerScreen(Screen):
         self.streamurl = url
         self.servicetype = servicetype
 
-        # InfoBarBase übernimmt das Video-Rendering + Infobar-Handling.
+        # Transparenter Vollbild-Skin: Video (Decoder) scheint durch.
+        w, h = theme.osd_size()
+        self.skin = (
+            '<screen name="SmartysStreamPlayer" position="0,0" '
+            'size="%d,%d" backgroundColor="transparent" flags="wfNoBorder">'
+            '<widget name="actions" position="0,0" size="1,1" '
+            'transparent="1" zPosition="0"/>'
+            "</screen>" % (w, h)
+        )
+
         InfoBarBase.__init__(self)
 
         self["actions"] = ActionMap(
