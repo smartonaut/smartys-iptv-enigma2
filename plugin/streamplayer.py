@@ -9,6 +9,9 @@ XStreamity_StreamPlayer.
 
 import base64
 import time
+import os
+import subprocess
+import datetime
 
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
@@ -38,6 +41,10 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         # EPG-Daten (start_timestamp / stop_timestamp / titel)
         self._epg_now = None
         self._epg_next = None
+
+        # Timeshift (Pause = automatische Aufnahme in den Buffer).
+        self._timeshift_proc = None
+        self._timeshift_path = None
 
         w, h = theme.osd_size()
         # Transparenter Vollbild-Skin + Infobar unten.
@@ -88,7 +95,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["progress"] = ProgressBar()
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "DirectionActions", "ColorActions"],
+            ["OkCancelActions", "DirectionActions", "ColorActions",
+             "InfobarActions"],
             {
                 "ok": self.toggle_infobar,
                 "cancel": self.quit,
@@ -96,6 +104,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 "up": self.quit,
                 "down": self.quit,
                 "red": self.toggle_recording,
+                "pause": self.toggle_timeshift,
+                "playpause": self.toggle_timeshift,
             },
         )
 
@@ -227,17 +237,79 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 MessageBox, _("Aufnahme beendet:\n%s") % path,
                 MessageBox.TYPE_INFO, timeout=5)
         else:
+            recorder.ask_recording(
+                self.session, self.streamurl,
+                self.stream_name or "Aufnahme",
+                api=self.api, stream_id=self.stream_id)
+
+    # --- Timeshift (PAUSE = automatische Aufnahme) ---
+
+    def toggle_timeshift(self):
+        """PAUSE = Aufnahme in den Buffer starten; nochmal = Buffer abspielen."""
+        if self._timeshift_proc is None:
+            self._start_timeshift()
+        else:
+            self._resume_timeshift()
+
+    def _start_timeshift(self):
+        ts_dir = "/media/hdd/timeshift"
+        try:
+            os.makedirs(ts_dir, exist_ok=True)
+        except Exception:
+            ts_dir = "/tmp"
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._timeshift_path = os.path.join(ts_dir, "timeshift_%s.ts" % ts)
+        cmd = [
+            "ffmpeg", "-y",
+            "-user_agent", recorder.USER_AGENT,
+            "-i", self.streamurl,
+            "-c", "copy",
+            "-f", "mpegts",
+            self._timeshift_path,
+        ]
+        try:
+            self._timeshift_proc = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            self.session.open(
+                MessageBox, _("Timeshift fehlgeschlagen: %s") % str(e),
+                MessageBox.TYPE_ERROR, timeout=5)
+            self._timeshift_proc = None
+            return
+        # Live-Bild anhalten; der Stream läuft weiter, die Aufnahme fängt ihn.
+        try:
+            self.session.nav.stopService()
+        except Exception:
+            pass
+        self["nowtitle"].setText(_("Timeshift: Aufnahme läuft"))
+        self["nowtime"].setText("")
+        self["progress"].setValue(0)
+        self._show_infobar()
+
+    def _resume_timeshift(self):
+        if self._timeshift_proc is not None:
             try:
-                path = rec.start(self.streamurl,
-                                 self.stream_name or "Aufnahme")
+                self._timeshift_proc.terminate()
+                try:
+                    self._timeshift_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._timeshift_proc.kill()
+                    self._timeshift_proc.wait()
+            except Exception:
+                pass
+            self._timeshift_proc = None
+        path = self._timeshift_path
+        self._timeshift_path = None
+        if path and os.path.exists(path):
+            try:
+                self.session.nav.playService(
+                    eServiceReference(self.servicetype, 0, path))
+                self["nowtitle"].setText(_("Wiedergabe vom Timeshift-Buffer"))
+                self._show_infobar()
             except Exception as e:
                 self.session.open(
-                    MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
+                    MessageBox, _("Wiedergabe fehlgeschlagen: %s") % str(e),
                     MessageBox.TYPE_ERROR, timeout=5)
-                return
-            self.session.open(
-                MessageBox, _("Aufnahme gestartet:\n%s") % path,
-                MessageBox.TYPE_INFO, timeout=5)
 
     # --- Beenden ---
 
@@ -247,6 +319,18 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             self._hide_timer.stop()
         except Exception:
             pass
+        # Laufende Timeshift-Aufnahme beenden (Buffer bleibt erhalten).
+        if self._timeshift_proc is not None:
+            try:
+                self._timeshift_proc.terminate()
+                try:
+                    self._timeshift_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._timeshift_proc.kill()
+                    self._timeshift_proc.wait()
+            except Exception:
+                pass
+            self._timeshift_proc = None
         try:
             self.session.nav.stopService()
         except Exception:

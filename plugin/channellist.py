@@ -164,7 +164,8 @@ class LiveListScreen(BaseListScreen):
         if not ch:
             return
         name = ch.get("name", "Sender")
-        url = self.api.creds.stream_url(ch.get("stream_id"), "ts")
+        stream_id = ch.get("stream_id")
+        url = self.api.creds.stream_url(stream_id, "ts")
 
         rec = recorder.get_recorder()
         if rec.recording:
@@ -173,16 +174,8 @@ class LiveListScreen(BaseListScreen):
                 MessageBox, _("Aufnahme beendet:\n%s") % path,
                 MessageBox.TYPE_INFO, timeout=5)
         else:
-            try:
-                path = rec.start(url, name)
-            except Exception as e:
-                self.session.open(
-                    MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
-                    MessageBox.TYPE_ERROR, timeout=5)
-                return
-            self.session.open(
-                MessageBox, _("Aufnahme gestartet:\n%s") % path,
-                MessageBox.TYPE_INFO, timeout=5)
+            recorder.ask_recording(self.session, url, name,
+                                   api=self.api, stream_id=stream_id)
 
     def on_info(self):
         """EPG/INFO = EPG-Ansicht des markierten Senders öffnen."""

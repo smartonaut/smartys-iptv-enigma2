@@ -31,13 +31,18 @@ class Recorder(object):
     def __init__(self):
         self.proc = None
         self.output_path = None
+        self._stop_timer = None
 
     @property
     def recording(self):
         return self.proc is not None and self.proc.poll() is None
 
-    def start(self, url, name):
-        """Startet die Aufnahme. Liefert den Ausgabepfad oder wirft."""
+    def start(self, url, name, end_ts=None):
+        """Startet die Aufnahme. Liefert den Ausgabepfad oder wirft.
+
+        end_ts: optionaler Unix-Timestamp — die Aufnahme stoppt dann
+        automatisch zu dieser Zeit (z.B. Ende der Sendung).
+        """
         if self.recording:
             raise RuntimeError("Aufnahme läuft bereits")
         safe = "".join(c if c.isalnum() or c in " .-_" else "_" for c in name)
@@ -63,10 +68,32 @@ class Recorder(object):
             stderr=subprocess.DEVNULL,
         )
         self.output_path = path
+        if end_ts:
+            self._schedule_stop(end_ts)
         return path
+
+    def _schedule_stop(self, end_ts):
+        """Plant das automatische Stoppen zur Endzeit."""
+        delay_ms = max(1000, int((end_ts - time.time()) * 1000))
+        self._stop_timer = eTimer()
+        try:
+            self._stop_timer.callback.append(self._auto_stop)
+        except Exception:
+            self._stop_timer.timeout.connect(self._auto_stop)
+        self._stop_timer.start(delay_ms, True)
+
+    def _auto_stop(self):
+        if self.recording:
+            self.stop()
 
     def stop(self):
         """Beendet die Aufnahme. Liefert den Ausgabepfad oder None."""
+        if self._stop_timer is not None:
+            try:
+                self._stop_timer.stop()
+            except Exception:
+                pass
+            self._stop_timer = None
         if self.proc is None:
             return None
         try:
@@ -193,3 +220,52 @@ def get_scheduler():
     if _scheduler is None:
         _scheduler = TimerScheduler()
     return _scheduler
+
+
+def ask_recording(session, url, name, api=None, stream_id=None):
+    """Zeigt die Aufnahme-Abfrage (endlos vs. bis Sendungsende) und startet."""
+    from Screens.ChoiceBox import ChoiceBox
+    from Screens.MessageBox import MessageBox
+    import datetime
+
+    rec = get_recorder()
+
+    # EPG-Ende ermitteln (falls verfügbar).
+    end_ts = None
+    end_label = ""
+    if api and stream_id:
+        try:
+            data = api.short_epg(stream_id, limit=1)
+            listings = data.get("epg_listings", []) or []
+            if listings:
+                end_ts = int(listings[0].get("stop_timestamp", "0"))
+                if end_ts:
+                    end_label = datetime.datetime.fromtimestamp(
+                        end_ts).strftime("%H:%M")
+        except Exception:
+            end_ts = None
+
+    choices = [(_("Endlos (bis manuell gestoppt)"), "endless")]
+    if end_ts:
+        choices.append((_("Bis Ende der Sendung (%s)") % end_label, "epg"))
+
+    def _done(result):
+        if result is None:
+            return
+        mode = result[1] if isinstance(result, (tuple, list)) else "endless"
+        try:
+            if mode == "epg" and end_ts:
+                path = rec.start(url, name, end_ts=end_ts)
+            else:
+                path = rec.start(url, name)
+        except Exception as e:
+            session.open(
+                MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
+                MessageBox.TYPE_ERROR, timeout=5)
+            return
+        session.open(
+            MessageBox, _("Aufnahme gestartet:\n%s") % path,
+            MessageBox.TYPE_INFO, timeout=5)
+
+    session.openWithCallback(
+        _done, ChoiceBox, title=_("Aufnahme"), list=choices)
