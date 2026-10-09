@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Hauptmenü-Screen."""
+"""Smartys IPTV — Hauptmenü-Screen (Vollbild, alle Auflösungen)."""
 
 from Screens.Screen import Screen
 from Components.ActionMap import ActionMap
@@ -7,23 +7,19 @@ from Components.Label import Label
 from Components.MenuList import MenuList
 
 from .config import Config
-from .pairing import PairingScreen
+from . import theme
 
 
 class MainMenuScreen(Screen):
-    skin = """
-        <screen position="center,center" size="560,420" title="Smartys IPTV">
-            <widget name="menu" position="20,20" size="520,340" />
-            <widget name="status" position="20,370" size="520,30" font="Regular;18" halign="center" />
-        </screen>
-    """
-
     def __init__(self, session):
+        self.skin = theme.build_skin("SmartysMainMenu")
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()
 
-        self["menu"] = MenuList([])
+        self["header"] = Label(_("Menü"))
+        self["subtitle"] = Label(_("Live-TV · Filme · Serien"))
+        self["list"] = MenuList([])
         self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
@@ -43,12 +39,12 @@ class MainMenuScreen(Screen):
             (_("Serien"), self.open_series),
             (_("Einstellungen / Pairing"), self.open_settings),
         ]
-        self["menu"].setList([(label, fnc) for label, fnc in entries])
+        self["list"].setList([(label, fnc) for label, fnc in entries])
         self["status"].setText(
             _("Verbunden") if paired else _("Nicht verbunden — bitte pairen"))
 
     def ok(self):
-        sel = self["menu"].getCurrent()
+        sel = self["list"].getCurrent()
         if sel:
             sel[1]()
 
@@ -65,4 +61,5 @@ class MainMenuScreen(Screen):
         self.session.open(SeriesListScreen, self.cfg)
 
     def open_settings(self):
+        from .pairing import PairingScreen
         self.session.open(PairingScreen)

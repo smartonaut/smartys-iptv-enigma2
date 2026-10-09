@@ -1,116 +1,60 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Serienliste (Serien → Staffeln → Episoden)."""
+"""Smartys IPTV — Serienliste (Serien → Episoden)."""
 
-from Screens.Screen import Screen
-from Components.ActionMap import ActionMap
-from Components.MenuList import MenuList
-
-from .api import Credentials, XtreamApi, ApiError
+from .screens_base import BaseListScreen
 from . import player as vlc_player
 
 
-class SeriesListScreen(Screen):
-    skin = """
-        <screen position="center,center" size="720,480" title="Smartys IPTV — Serien">
-            <widget name="list" position="20,20" size="680,440" />
-        </screen>
-    """
+class SeriesListScreen(BaseListScreen):
+    screen_name = "SmartysSeriesList"
+    header_text = "Serien"
+    subtitle_text = "Staffeln & Episoden"
 
-    def __init__(self, session, cfg):
-        Screen.__init__(self, session)
-        self.session = session
-        self.cfg = cfg
-        self.api = self._build_api()
-        self.series = []
-
-        self["list"] = MenuList([])
-        self["actions"] = ActionMap(
-            ["OkCancelActions"],
-            {"ok": self.open_series, "cancel": self.close},
+    def _fetch(self):
+        series = self.api.series_streams()
+        return (
+            [(s.get("name", "?"), s) for s in series],
+            _("%d Serien") % len(series),
         )
-        self.onLayoutFinish.append(self._load)
 
-    def _build_api(self):
-        providers = self.cfg.providers()
-        if not providers:
-            return None
-        p = providers[0]
-        return XtreamApi(Credentials(p["server_url"], p["username"], p["password"]))
-
-    def _load(self):
-        if not self.api:
-            self["list"].setList([(_("Nicht verbunden"), None)])
-            return
-        try:
-            series = self.api.series_streams()
-        except ApiError as e:
-            self["list"].setList([(_("Fehler: %s") % str(e), None)])
-            return
-        self.series = series
-        self["list"].setList([
-            (s.get("name", "?"), s) for s in series
-        ])
-
-    def open_series(self):
-        sel = self["list"].getCurrent()
-        if not sel or not sel[1]:
-            return
-        s = sel[1]
-        series_id = s.get("series_id")
+    def _on_select(self, item):
+        series_id = item.get("series_id")
         self.session.open(EpisodeListScreen, self.api, series_id)
 
 
-class EpisodeListScreen(Screen):
-    skin = """
-        <screen position="center,center" size="720,480" title="Episoden">
-            <widget name="list" position="20,20" size="680,440" />
-        </screen>
-    """
+class EpisodeListScreen(BaseListScreen):
+    screen_name = "SmartysEpisodes"
+    header_text = "Episoden"
+    subtitle_text = ""
 
     def __init__(self, session, api, series_id):
-        Screen.__init__(self, session)
-        self.session = session
-        self.api = api
-        self.series_id = series_id
-        self.episodes = []
+        # Episode-Screen erhält die fertige API statt cfg
+        self._series_id = series_id
+        self._api_override = api
+        super().__init__(session, None)
 
-        self["list"] = MenuList([])
-        self["actions"] = ActionMap(
-            ["OkCancelActions"],
-            {"ok": self.play_episode, "cancel": self.close},
-        )
-        self.onLayoutFinish.append(self._load)
+    def _build_api(self):
+        return self._api_override
 
-    def _load(self):
-        try:
-            info = self.api.series_info(self.series_id)
-        except ApiError as e:
-            self["list"].setList([(_("Fehler: %s") % str(e), None)])
-            return
-        # info: {"seasons": [...], "episodes": {season: [...]}, ...}
+    def _fetch(self):
+        info = self.api.series_info(self._series_id)
         eps = info.get("episodes") or {}
-        # Flache Liste aller Episoden über alle Staffeln
         flat = []
         for season, ep_list in eps.items():
             for ep in ep_list:
                 ep = dict(ep)
                 ep["_season"] = season
                 flat.append(ep)
-        self.episodes = flat
-        self["list"].setList([
-            ("S%sE%s — %s" % (
+        return (
+            [("S%sE%s — %s" % (
                 e.get("_season", "?"),
                 e.get("episode_num", "?"),
-                e.get("title") or ""), e)
-            for e in flat
-        ])
+                e.get("title") or ""), e) for e in flat],
+            _("%d Episoden") % len(flat),
+        )
 
-    def play_episode(self):
-        sel = self["list"].getCurrent()
-        if not sel or not sel[1]:
-            return
-        ep = sel[1]
-        ep_id = ep.get("id")
-        ext = ep.get("container_extension") or "mp4"
+    def _on_select(self, item):
+        ep_id = item.get("id")
+        ext = item.get("container_extension") or "mp4"
         url = self.api.creds.series_url(ep_id, ext)
         vlc_player.play(self.session, url)

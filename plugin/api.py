@@ -19,7 +19,11 @@ _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
-USER_AGENT = "SmartysIPTV-E2/1.0"
+# Browser-User-Agent (wie beim Stream) — einige Xtream-Server blocken
+# Requests ohne gültigen Browser-UA auch auf der player_api.php mit 407.
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/145.0.0.0 Safari/537.36")
 
 
 class ApiError(Exception):
