@@ -71,11 +71,12 @@ def font(size):
     return int(round(size * w / REF_W))
 
 
-def build_skin(name, logo=True, list_h=None, extra_widgets=""):
+def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False):
     """Baut einen vollständigen Vollbild-Skin mit Logo, Header, Liste, Status.
 
     Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
     list_h: Hoehe der Liste in Referenz-Einheiten (Standard 400).
+    preview: Pig-Fenster (Live-Vorschau) oben rechts einblenden.
     """
     if list_h is None:
         list_h = 400
@@ -88,6 +89,19 @@ def build_skin(name, logo=True, list_h=None, extra_widgets=""):
             % (_images_dir(), scale(48), scale_y(42), scale(72), scale_y(72))
         )
     header_x = scale(150) if logo else scale(48)
+    # Bei Vorschau: Liste links schmaler, Pig rechts
+    if preview:
+        list_x = scale(48)
+        list_w = scale(760)
+        pig_widget = (
+            '<widget source="session.VideoPicture" render="Pig" '
+            'position="%d,%d" size="%d,%d" backgroundColor="%s" transparent="1" zPosition="3" />'
+            % (scale(824), scale_y(162), scale(408), scale_y(230), "#000000")
+        )
+    else:
+        list_x = scale(48)
+        list_w = scale(1184)
+        pig_widget = ""
     return ("""
         <screen name="%s" position="0,0" size="%d,%d" backgroundColor="%s" flags="wfNoBorder">
             <ePixmap pixmap="%s/images/background.png" position="0,0" size="%d,%d" alphatest="off" zPosition="-1" />
@@ -95,6 +109,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets=""):
             <eLabel text="Smartys IPTV" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" backgroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
             <widget name="header" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
             <widget name="subtitle" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
+            %s
             <widget name="list" position="%d,%d" size="%d,%d" scrollbarMode="showOnDemand" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
             <widget name="status" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="center" valign="center" transparent="1" zPosition="2" />
             %s
@@ -106,7 +121,8 @@ def build_skin(name, logo=True, list_h=None, extra_widgets=""):
         header_x, scale_y(40), scale(500), scale_y(56), font(28), GOLD, BG,
         scale(48), scale_y(96), scale(1100), scale_y(34), font(22), TEXT,
         scale(48), scale_y(132), scale(1100), scale_y(20), font(14), MUTED,
-        scale(48), scale_y(162), scale(1184), scale_y(list_h),
+        pig_widget,
+        list_x, scale_y(162), list_w, scale_y(list_h),
         TEXT, BG, PANEL, SELECT_BG,
         scale(48), scale_y(162 + list_h + 12), scale(1184), scale_y(30),
         font(15), MUTED,
