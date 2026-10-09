@@ -12,7 +12,9 @@ from . import theme
 
 class MainMenuScreen(Screen):
     def __init__(self, session):
-        self.skin = theme.build_skin("SmartysMainMenu")
+        self.skin = theme.build_skin(
+            "SmartysMainMenu",
+            footer="OK = Auswahl   ·   EXIT = Beenden")
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()

@@ -54,29 +54,20 @@ def scale_y(y):
     return int(round(y * h / REF_H))
 
 
-def sw():
-    """Skalierte Breite (1280 -> echte Breite)."""
-    w, h = osd_size()
-    return w
-
-
-def sh():
-    w, h = osd_size()
-    return h
-
-
 def font(size):
     """Schriftgrösse proportional skalieren."""
     w, h = osd_size()
     return int(round(size * w / REF_W))
 
 
-def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False):
+def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
+               footer=""):
     """Baut einen vollständigen Vollbild-Skin mit Logo, Header, Liste, Status.
 
     Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
     list_h: Hoehe der Liste in Referenz-Einheiten (Standard 400).
     preview: Pig-Fenster (Live-Vorschau) oben rechts einblenden.
+    footer: Tasten-Hinweise unten (z.B. "ROT = Aufnahme").
     """
     if list_h is None:
         list_h = 400
@@ -89,19 +80,42 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False):
             % (_images_dir(), scale(48), scale_y(42), scale(72), scale_y(72))
         )
     header_x = scale(150) if logo else scale(48)
+
+    # Gold-Akzentlinie über der Liste (unter Subtitle)
+    accent = (
+        '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" '
+        'zPosition="2" />'
+        % (scale(48), scale_y(158), scale(200), scale_y(3), GOLD)
+    )
+
     # Bei Vorschau: Liste links schmaler, Pig rechts
     if preview:
         list_x = scale(48)
         list_w = scale(760)
         pig_widget = (
             '<widget source="session.VideoPicture" render="Pig" '
-            'position="%d,%d" size="%d,%d" backgroundColor="%s" transparent="1" zPosition="3" />'
-            % (scale(824), scale_y(162), scale(408), scale_y(230), "#000000")
+            'position="%d,%d" size="%d,%d" backgroundColor="#000000" '
+            'transparent="1" zPosition="3" />'
+            % (scale(824), scale_y(162), scale(408), scale_y(230))
         )
     else:
         list_x = scale(48)
         list_w = scale(1184)
         pig_widget = ""
+
+    # Footer mit Tasten-Hinweisen
+    footer_widget = ""
+    if footer:
+        footer_widget = (
+            '<eLabel text="%s" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" backgroundColor="%s" '
+            'halign="left" valign="center" transparent="1" zPosition="2" />'
+            % (footer, scale(48), scale_y(678), scale(1184), scale_y(30),
+               font(15), MUTED, BG)
+        )
+
+    item_h = scale(38)  # Abstand zwischen Listeneinträgen
+
     return ("""
         <screen name="%s" position="0,0" size="%d,%d" backgroundColor="%s" flags="wfNoBorder">
             <ePixmap pixmap="%s/images/background.png" position="0,0" size="%d,%d" alphatest="off" zPosition="-1" />
@@ -110,8 +124,10 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False):
             <widget name="header" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
             <widget name="subtitle" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
             %s
-            <widget name="list" position="%d,%d" size="%d,%d" scrollbarMode="showOnDemand" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
+            %s
+            <widget name="list" position="%d,%d" size="%d,%d" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
             <widget name="status" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="center" valign="center" transparent="1" zPosition="2" />
+            %s
             %s
         </screen>
     """ % (
@@ -121,11 +137,13 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False):
         header_x, scale_y(40), scale(500), scale_y(56), font(28), GOLD, BG,
         scale(48), scale_y(96), scale(1100), scale_y(34), font(22), TEXT,
         scale(48), scale_y(132), scale(1100), scale_y(20), font(14), MUTED,
+        accent,
         pig_widget,
-        list_x, scale_y(162), list_w, scale_y(list_h),
-        TEXT, BG, PANEL, SELECT_BG,
+        list_x, scale_y(162), list_w, scale_y(list_h), item_h,
+        TEXT, GOLD, PANEL, SELECT_BG,
         scale(48), scale_y(162 + list_h + 12), scale(1184), scale_y(30),
         font(15), MUTED,
+        footer_widget,
         extra_widgets,
     ))
 
@@ -134,4 +152,3 @@ def _images_dir():
     """Absoluter Pfad zum images-Verzeichnis (neben den Plugin-Modulen)."""
     import os
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
-

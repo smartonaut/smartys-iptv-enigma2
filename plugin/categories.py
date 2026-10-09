@@ -26,7 +26,9 @@ class CategoryListScreen(Screen):
 
     def __init__(self, session, cfg, category_action, list_screen,
                  list_header, list_subtitle):
-        self.skin = theme.build_skin(self.screen_name)
+        self.skin = theme.build_skin(
+            self.screen_name,
+            footer="OK = Öffnen   ·   EXIT = Zurück")
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg

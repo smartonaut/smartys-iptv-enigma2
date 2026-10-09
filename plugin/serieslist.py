@@ -9,6 +9,7 @@ class SeriesListScreen(BaseListScreen):
     screen_name = "SmartysSeriesList"
     header_text = "Serien"
     subtitle_text = "Staffeln & Episoden"
+    footer = "OK = Öffnen   ·   EXIT = Zurück"
 
     def _fetch(self):
         series = self.api.series_streams(self.category_id)

@@ -26,10 +26,13 @@ class BaseListScreen(Screen):
     subtitle_text = ""
     # Unterklassen setzen True, um ein Pig-Vorschaufenster einzublenden.
     preview = False
+    # Tasten-Hinweise unten im Screen.
+    footer = ""
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
-        self.skin = theme.build_skin(self.screen_name, preview=self.preview)
+        self.skin = theme.build_skin(self.screen_name, preview=self.preview,
+                                     footer=self.footer)
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg

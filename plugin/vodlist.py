@@ -9,6 +9,7 @@ class VodListScreen(BaseListScreen):
     screen_name = "SmartysVodList"
     header_text = "Filme"
     subtitle_text = "Video-on-Demand"
+    footer = "OK = Abspielen   ·   EXIT = Zurück"
 
     def _fetch(self):
         movies = self.api.vod_streams(self.category_id)

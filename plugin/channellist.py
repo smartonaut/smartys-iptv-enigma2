@@ -14,6 +14,7 @@ class LiveListScreen(BaseListScreen):
     header_text = "Live-TV"
     subtitle_text = "Sender wählen"
     preview = True
+    footer = "OK = Abspielen   ·   ROT = Aufnahme   ·   EXIT = Zurück"
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
