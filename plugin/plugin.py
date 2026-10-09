@@ -42,6 +42,11 @@ def Plugins(**kwargs):
             ],
             fnc=main,
             icon=_icon,
-            sessionstart=sessionstart,
-        )
+        ),
+        # Autostart: Timer-Scheduler beim Enigma2-Start initialisieren.
+        PluginDescriptor(
+            name="Smartys IPTV (Autostart)",
+            where=[PluginDescriptor.WHERE_AUTOSTART],
+            fnc=sessionstart,
+        ),
     ]
