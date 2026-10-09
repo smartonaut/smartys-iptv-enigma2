@@ -85,7 +85,9 @@ class LiveListScreen(BaseListScreen):
         stream_id = ch.get("stream_id")
         name = ch.get("name", "")
         url = self.api.creds.stream_url(stream_id, "ts")
-        self._open_player(url, name, stream_id)
+        recorder.confirm_if_recording(
+            self.session,
+            lambda: self._open_player(url, name, stream_id))
 
     def _open_player(self, url, name="", stream_id=None):
         """Vollbild: StreamPlayer-Screen öffnen (rendert das Video + EPG)."""

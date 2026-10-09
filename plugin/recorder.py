@@ -269,3 +269,29 @@ def ask_recording(session, url, name, api=None, stream_id=None):
 
     session.openWithCallback(
         _done, ChoiceBox, title=_("Aufnahme"), list=choices)
+
+
+def confirm_if_recording(session, proceed):
+    """Wenn eine Aufnahme läuft, vor dem Umschalten bestätigen lassen.
+
+    Beim Umschalten auf einen anderen Sender wird die Aufnahme beendet
+    (die IPTV-Line erlaubt meist nur eine gleichzeitige Verbindung).
+    proceed() wird nur ausgeführt, wenn keine Aufnahme läuft ODER der
+    Nutzer das Umschalten bestätigt.
+    """
+    rec = get_recorder()
+    if not rec.recording:
+        proceed()
+        return
+
+    def _done(answer):
+        if answer:
+            rec.stop()
+            proceed()
+
+    from Screens.MessageBox import MessageBox
+    session.openWithCallback(
+        _done, MessageBox,
+        _("Aufnahme läuft!\nBeim Umschalten wird sie beendet.\n"
+          "Wirklich umschalten?"),
+        MessageBox.TYPE_YESNO)

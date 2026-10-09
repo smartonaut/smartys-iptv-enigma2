@@ -101,8 +101,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 "ok": self.toggle_infobar,
                 "cancel": self.quit,
                 "stop": self.quit,
-                "up": self.quit,
-                "down": self.quit,
+                "up": self._confirm_switch,
+                "down": self._confirm_switch,
                 "red": self.toggle_recording,
                 "pause": self.toggle_timeshift,
                 "playpause": self.toggle_timeshift,
@@ -312,6 +312,27 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                     MessageBox.TYPE_ERROR, timeout=5)
 
     # --- Beenden ---
+
+    def _confirm_switch(self):
+        """Kanalwechsel/Beenden: vorher bestätigen, wenn eine Aufnahme läuft."""
+        rec = recorder.get_recorder()
+        has_rec = rec.recording
+        has_ts = self._timeshift_proc is not None
+        if not has_rec and not has_ts:
+            self.quit()
+            return
+
+        def _done(answer):
+            if answer:
+                if has_rec:
+                    rec.stop()
+                self.quit()
+
+        self.session.openWithCallback(
+            _done, MessageBox,
+            _("Aufnahme läuft!\nBeim Umschalten wird sie beendet.\n"
+              "Wirklich umschalten?"),
+            MessageBox.TYPE_YESNO)
 
     def quit(self):
         try:
