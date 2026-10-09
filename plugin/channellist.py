@@ -35,12 +35,14 @@ class LiveListScreen(BaseListScreen):
 
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
+        name = ch.get("name", "")
         url = self.api.creds.stream_url(stream_id, "ts")
-        self._open_player(url)
+        self._open_player(url, name, stream_id)
 
-    def _open_player(self, url):
-        """Vollbild: StreamPlayer-Screen öffnen (rendert das Video)."""
-        vlc_player.open_player(self.session, url)
+    def _open_player(self, url, name="", stream_id=None):
+        """Vollbild: StreamPlayer-Screen öffnen (rendert das Video + EPG)."""
+        vlc_player.open_player(self.session, url, name=name,
+                               stream_id=stream_id, api=self.api)
 
     def _on_selection_changed(self):
         # Vorschau verzögert starten, damit schnelles Scrollen nicht ruckelt.
