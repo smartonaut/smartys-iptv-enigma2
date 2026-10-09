@@ -327,6 +327,9 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 if has_rec:
                     rec.stop()
                 self.quit()
+            else:
+                # Zurück zum Sender: Overlay ausblenden, Video läuft weiter.
+                self._hide_infobar()
 
         self.session.openWithCallback(
             _done, MessageBox,
