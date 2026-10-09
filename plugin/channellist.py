@@ -20,7 +20,10 @@ class LiveListScreen(BaseListScreen):
         super().__init__(session, cfg, category_id, header_text, subtitle_text)
         # Debounce-Timer: Vorschau erst nach kurzem Verharren auf einem Sender.
         self._preview_timer = eTimer()
-        self._preview_timer.callback.append(self._preview_tick)
+        try:
+            self._preview_timer.callback.append(self._preview_tick)
+        except Exception:
+            self._preview_timer.timeout.connect(self._preview_tick)
         self["list"].onSelectionChanged.append(self._on_selection_changed)
 
     def _fetch(self):
