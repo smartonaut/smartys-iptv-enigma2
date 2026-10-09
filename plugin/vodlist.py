@@ -59,4 +59,4 @@ class VodListScreen(Screen):
         stream_id = m.get("stream_id")
         ext = m.get("container_extension") or "mp4"
         url = self.api.creds.movie_url(stream_id, ext)
-        vlc_player.play(url)
+        vlc_player.play(self.session, url)

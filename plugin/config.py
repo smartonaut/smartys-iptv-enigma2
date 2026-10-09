@@ -9,9 +9,12 @@ der ein Reboot übersteht).
 
 import os
 import json
+import secrets
 
 CONFIG_DIR = "/etc/enigma2"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "smartysiptv.json")
+
+_PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
 
 
 class Config(object):
@@ -44,12 +47,29 @@ class Config(object):
         self._data[key] = value
         self.save()
 
-    # ---- Konkrete Felder ----
+    # ---- Player-ID + Pairing-Passwort (einmalig generiert) ----
+    #
+    # Identisch zur Desktop/Android-Version (CredStore.kt):
+    #   Player-ID = 6 Bytes im MAC-Format, Byte 0 = lokal-admin-Bit (02:...)
+    #   Pairing-PW = 12 Zeichen, kryptographisch sicher.
+
     def player_id(self):
-        return self.get("player_id", "")
+        pid = self.get("player_id", "")
+        if pid:
+            return pid
+        b = bytearray(secrets.token_bytes(6))
+        b[0] = (b[0] & 0xFE) | 0x02
+        pid = ":".join("%02X" % x for x in b)
+        self.set("player_id", pid)
+        return pid
 
     def pairing_pw(self):
-        return self.get("pairing_pw", "")
+        pw = self.get("pairing_pw", "")
+        if pw:
+            return pw
+        pw = "".join(secrets.choice(_PW_CHARS) for _ in range(12))
+        self.set("pairing_pw", pw)
+        return pw
 
     def providers(self):
         return self.get("providers", [])  # Liste von {server_url, username, password}

@@ -60,4 +60,4 @@ class LiveListScreen(Screen):
         ch = sel[1]
         stream_id = ch.get("stream_id")
         url = self.api.creds.stream_url(stream_id, "ts")
-        vlc_player.play(url)
+        vlc_player.play(self.session, url)

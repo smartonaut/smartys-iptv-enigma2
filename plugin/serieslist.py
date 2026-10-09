@@ -113,4 +113,4 @@ class EpisodeListScreen(Screen):
         ep_id = ep.get("id")
         ext = ep.get("container_extension") or "mp4"
         url = self.api.creds.series_url(ep_id, ext)
-        vlc_player.play(url)
+        vlc_player.play(self.session, url)

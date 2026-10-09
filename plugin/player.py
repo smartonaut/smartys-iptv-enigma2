@@ -2,67 +2,67 @@
 """
 Smartys IPTV — Wiedergabe-Anbindung für Enigma2.
 
-Probiert die Player-Engines automatisch durch (wie IPTV-BOX/e2iplayer):
-  1. exteplayer3  (ffmpeg-basiert, robust für Xtream-Redirects/403)
-  2. GStreamer    (Standard)
-  3. serviceapp   (exteplayer3/gstplayer als Dienst)
+Wiedergabe über exteplayer3 (ffmpeg-basiert, robust für Xtream-Streams).
+Der User-Agent ist ENTSCHEIDEND: viele Xtream-Server (line.smartytv.xyz)
+blocken Requests ohne gültigen Browser-User-Agent mit HTTP 407.
 
-Der User-Agent ist entscheidend: viele Xtream-Server blocken Requests ohne
-plausiblen User-Agent mit 403/Redirect-Schleifen.
+Bewiesen auf VU+ Duo4K (openATV 7.6): exteplayer3 + Browser-UA spielt
+den Stream sauber (PLAYBACK_PLAY sts:0, 1280x720 H.264, AC3 deutsch).
+
+Engine-Priorität:
+  1. exteplayer3 direkt (bewiesen funktionsfähig) — mit -u User-Agent
+  2. exteplayer3 als Enigma2-Service (5002, via serviceapp, falls konfiguriert)
+  3. GStreamer (4097) — letzter Fallback
 """
 
-USER_AGENT = "SmartysIPTV-E2/1.0 (Enigma2)"
+import os
+import subprocess
+
+# Browser-User-Agent (wie XStreamity Default) — sonst 407 vom Stream-Server.
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/145.0.0.0 Safari/537.36")
+
+SERVICE_EXTPLAYER3 = 5002
+SERVICE_GSTREAMER = 4097
 
 
-def _play_exteplayer3(url, user_agent):
-    """exteplayer3 direkt aufrufen (eigenständiges Binary, ffmpeg)."""
+def _has(binary):
+    return os.path.exists("/usr/bin/" + binary)
+
+
+def _play_exteplayer3_direct(url):
+    """exteplayer3 direkt aufrufen — der bewiesene, robuste Weg."""
     try:
-        from subprocess import Popen
-        # exteplayer3 liegt je nach Image unter /usr/bin/exteplayer3
-        Popen(["exteplayer3", url], env=_with_ua(user_agent))
+        subprocess.Popen(["exteplayer3", url, "-u", USER_AGENT])
         return True
     except Exception:
         return False
 
 
-def _play_gstreamer(url, user_agent):
-    """GStreamer-basierte Wiedergabe über die Enigma2-ServiceAPI."""
+def _play_via_service(session, url, servicetype):
+    """Spielt die URL über Enigma2's Service-System (korrektes OSD/Fullscreen)."""
     try:
-        from enigma import eServiceReference, eServiceCenter
-        ref = eServiceReference(eServiceReference.idGST, 0, url)
+        from enigma import eServiceReference
+        ref = eServiceReference(servicetype, 0, url)
         ref.setName(url)
-        eServiceCenter.getInstance().playService(ref)
+        session.nav.playService(ref)
         return True
     except Exception:
         return False
 
 
-def _play_serviceapp(url, user_agent):
-    """serviceapp (exteplayer3/gstplayer als Service) nutzen."""
-    try:
-        from enigma import eServiceReference, eServiceCenter
-        # 4097 = serviceapp-Player (abhängig vom Image), hier als Fallback
-        ref = eServiceReference(4097, 0, url)
-        ref.setName(url)
-        eServiceCenter.getInstance().playService(ref)
+def play(session, url):
+    """Wählt die beste verfügbare Engine. Liefert True bei Erfolg."""
+    # 1. exteplayer3 direkt (primär, bewiesen)
+    if _has("exteplayer3"):
+        if _play_exteplayer3_direct(url):
+            return True
+    # 2. exteplayer3 als Service (5002, via serviceapp)
+    if _has("exteplayer3"):
+        if _play_via_service(session, url, SERVICE_EXTPLAYER3):
+            return True
+    # 3. GStreamer (eingebauter Enigma2-Pfad)
+    if _play_via_service(session, url, SERVICE_GSTREAMER):
         return True
-    except Exception:
-        return False
-
-
-def _with_ua(user_agent):
-    import os
-    env = os.environ.copy()
-    env["HTTP_USER_AGENT"] = user_agent
-    return env
-
-
-def play(url):
-    """Versucht die Engines der Reihe nach. Liefert True bei Erfolg."""
-    for engine in (_play_exteplayer3, _play_gstreamer, _play_serviceapp):
-        try:
-            if engine(url, USER_AGENT):
-                return True
-        except Exception:
-            continue
     return False
