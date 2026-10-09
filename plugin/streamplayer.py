@@ -99,8 +99,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
              "InfobarActions"],
             {
                 "ok": self.toggle_infobar,
-                "cancel": self.quit,
-                "stop": self.quit,
+                "cancel": self._confirm_switch,
+                "stop": self._confirm_switch,
                 "up": self._confirm_switch,
                 "down": self._confirm_switch,
                 "red": self.toggle_recording,
