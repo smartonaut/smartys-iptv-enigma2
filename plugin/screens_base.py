@@ -28,11 +28,13 @@ class BaseListScreen(Screen):
     preview = False
     # Tasten-Hinweise unten im Screen.
     footer = ""
+    # Unterklassen setzen True, um ein EPG-Label (jetzt/danach) zu zeigen.
+    epg = False
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
         self.skin = theme.build_skin(self.screen_name, preview=self.preview,
-                                     footer=self.footer)
+                                     footer=self.footer, epg=self.epg)
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg
@@ -50,11 +52,12 @@ class BaseListScreen(Screen):
         self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions"],
+            ["OkCancelActions", "ColorActions", "InfoActions"],
             {
                 "ok": self.on_select,
                 "cancel": self.close,
                 "red": self.on_red,
+                "info": self.on_info,
             },
         )
         self.onLayoutFinish.append(self._load)
@@ -79,6 +82,11 @@ class BaseListScreen(Screen):
     # --- optional: ROT-Taste (Aufnahme) — Standard: ignorieren ---
 
     def on_red(self):
+        pass
+
+    # --- optional: EPG/INFO-Taste — Standard: ignorieren ---
+
+    def on_info(self):
         pass
 
     # --- gemeinsam ---

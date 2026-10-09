@@ -61,13 +61,14 @@ def font(size):
 
 
 def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
-               footer=""):
+               footer="", epg=False):
     """Baut einen vollständigen Vollbild-Skin mit Logo, Header, Liste, Status.
 
     Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
     list_h: Hoehe der Liste in Referenz-Einheiten (Standard 400).
     preview: Pig-Fenster (Live-Vorschau) oben rechts einblenden.
     footer: Tasten-Hinweise unten (z.B. "ROT = Aufnahme").
+    epg: EPG-Label (Jetzt/Danach) für den markierten Sender.
     """
     if list_h is None:
         list_h = 400
@@ -114,6 +115,17 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
                font(15), MUTED, BG)
         )
 
+    # EPG-Label (Jetzt/Danach) unter der Liste
+    epg_widget = ""
+    if epg:
+        epg_widget = (
+            '<widget name="epg" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" backgroundColor="%s" '
+            'halign="left" valign="center" transparent="1" zPosition="2" />'
+            % (scale(48), scale_y(610), scale(1184), scale_y(52), font(18),
+               TEXT, BG)
+        )
+
     item_h = scale(38)  # Abstand zwischen Listeneinträgen
 
     return ("""
@@ -127,6 +139,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
             %s
             <widget name="list" position="%d,%d" size="%d,%d" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
             <widget name="status" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="center" valign="center" transparent="1" zPosition="2" />
+            %s
             %s
             %s
         </screen>
@@ -143,6 +156,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
         TEXT, GOLD, PANEL, SELECT_BG,
         scale(48), scale_y(162 + list_h + 12), scale(1184), scale_y(30),
         font(15), MUTED,
+        epg_widget,
         footer_widget,
         extra_widgets,
     ))

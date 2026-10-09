@@ -10,6 +10,12 @@ Der User-Agent ist entscheidend (sonst 407 vom Stream-Server).
 
 import os
 import subprocess
+import time
+
+try:
+    from enigma import eTimer
+except Exception:
+    eTimer = None
 
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -87,3 +93,103 @@ def get_recorder():
     if _recorder is None:
         _recorder = Recorder()
     return _recorder
+
+
+class TimerScheduler(object):
+    """Geplante (Timer-)Aufnahmen: startet/stoppt ffmpeg zur eingetragenen Zeit.
+
+    Ein eTimer prüft alle 30 Sekunden, ob eine geplante Aufnahme fällig ist.
+    """
+
+    def __init__(self):
+        self.timers = []  # dicts: url, name, start, end, proc
+        self._timer = None
+        if eTimer is not None:
+            self._timer = eTimer()
+            try:
+                self._timer.callback.append(self._check)
+            except Exception:
+                self._timer.timeout.connect(self._check)
+
+    def schedule(self, url, name, start_ts, end_ts):
+        """Plant eine Aufnahme (Unix-Timestamps). Liefert die Timer-ID (dict)."""
+        entry = {
+            "url": url, "name": name,
+            "start": int(start_ts), "end": int(end_ts),
+            "proc": None, "done": False,
+        }
+        self.timers.append(entry)
+        self._ensure_running()
+        return entry
+
+    def pending(self):
+        """Liste aller geplanten, noch nicht abgeschlossenen Timer."""
+        return [t for t in self.timers if not t["done"]]
+
+    def _ensure_running(self):
+        if self._timer is not None:
+            try:
+                self._timer.start(30000, False)
+            except Exception:
+                pass
+
+    def _check(self):
+        now = int(time.time())
+        changed = False
+        for t in self.timers:
+            if t["done"]:
+                continue
+            # Start fällig?
+            if t["proc"] is None and now >= t["start"] and now < t["end"]:
+                safe = "".join(
+                    c if c.isalnum() or c in " .-_" else "_" for c in t["name"])
+                if not safe.strip():
+                    safe = "recording"
+                import datetime
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                path = os.path.join(REC_DIR, "%s_%s.ts" % (safe, ts))
+                if not os.path.isdir(REC_DIR):
+                    os.makedirs(REC_DIR, exist_ok=True)
+                cmd = ["ffmpeg", "-y", "-user_agent", USER_AGENT,
+                       "-i", t["url"], "-c", "copy", "-f", "mpegts", path]
+                try:
+                    t["proc"] = subprocess.Popen(
+                        cmd, stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+                except Exception:
+                    t["proc"] = None
+                changed = True
+            # Stop fällig?
+            elif t["proc"] is not None and now >= t["end"]:
+                try:
+                    t["proc"].terminate()
+                    try:
+                        t["proc"].wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        t["proc"].kill()
+                        t["proc"].wait()
+                except Exception:
+                    pass
+                t["proc"] = None
+                t["done"] = True
+                changed = True
+        if changed:
+            self._ensure_running()
+
+    def cancel(self, entry):
+        if entry["proc"] is not None:
+            try:
+                entry["proc"].terminate()
+            except Exception:
+                pass
+        entry["done"] = True
+
+
+_scheduler = None
+
+
+def get_scheduler():
+    global _scheduler
+    if _scheduler is None:
+        _scheduler = TimerScheduler()
+    return _scheduler

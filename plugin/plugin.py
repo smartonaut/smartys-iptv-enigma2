@@ -15,6 +15,9 @@ def main(session, **kwargs):
 
 
 def Plugins(**kwargs):
+    import os
+    _icon = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "images", "logo.png")
     return [
         PluginDescriptor(
             name="Smartys IPTV",
@@ -24,5 +27,6 @@ def Plugins(**kwargs):
                 PluginDescriptor.WHERE_EXTENSIONSMENU,
             ],
             fnc=main,
+            icon=_icon,
         )
     ]

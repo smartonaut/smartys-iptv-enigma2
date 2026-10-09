@@ -20,6 +20,6 @@ class VodListScreen(BaseListScreen):
 
     def _on_select(self, item):
         stream_id = item.get("stream_id")
-        ext = item.get("container_extension") or "mp4"
-        url = self.api.creds.movie_url(stream_id, ext)
-        vlc_player.open_player(self.session, url)
+        name = item.get("name", "")
+        from .voddetail import VodDetailScreen
+        self.session.open(VodDetailScreen, self.api, stream_id, name)

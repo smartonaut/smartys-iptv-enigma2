@@ -11,6 +11,7 @@ import base64
 import time
 
 from Screens.Screen import Screen
+from Screens.MessageBox import MessageBox
 from Components.ServiceEventTracker import InfoBarBase
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -18,6 +19,7 @@ from Components.ProgressBar import ProgressBar
 from enigma import eServiceReference, eTimer
 
 from . import theme
+from . import recorder
 
 
 class StreamPlayerScreen(InfoBarBase, Screen):
@@ -86,13 +88,14 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["progress"] = ProgressBar()
 
         self["actions"] = ActionMap(
-            ["OkCancelActions", "DirectionActions"],
+            ["OkCancelActions", "DirectionActions", "ColorActions"],
             {
                 "ok": self.toggle_infobar,
                 "cancel": self.quit,
                 "stop": self.quit,
                 "up": self.quit,
                 "down": self.quit,
+                "red": self.toggle_recording,
             },
         )
 
@@ -213,6 +216,28 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     def _auto_hide(self):
         self._hide_infobar()
+
+    # --- Aufnahme (ROT) ---
+
+    def toggle_recording(self):
+        rec = recorder.get_recorder()
+        if rec.recording:
+            path = rec.stop()
+            self.session.open(
+                MessageBox, _("Aufnahme beendet:\n%s") % path,
+                MessageBox.TYPE_INFO, timeout=5)
+        else:
+            try:
+                path = rec.start(self.streamurl,
+                                 self.stream_name or "Aufnahme")
+            except Exception as e:
+                self.session.open(
+                    MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
+                    MessageBox.TYPE_ERROR, timeout=5)
+                return
+            self.session.open(
+                MessageBox, _("Aufnahme gestartet:\n%s") % path,
+                MessageBox.TYPE_INFO, timeout=5)
 
     # --- Beenden ---
 
