@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Serienliste (Serien → Episoden)."""
+"""Smartys IPTV — Serienliste (Serien → Episoden, mit Kategorie-Filter)."""
 
 from .screens_base import BaseListScreen
 from . import player as vlc_player
@@ -11,7 +11,7 @@ class SeriesListScreen(BaseListScreen):
     subtitle_text = "Staffeln & Episoden"
 
     def _fetch(self):
-        series = self.api.series_streams()
+        series = self.api.series_streams(self.category_id)
         return (
             [(s.get("name", "?"), s) for s in series],
             _("%d Serien") % len(series),

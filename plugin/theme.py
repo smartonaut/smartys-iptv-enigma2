@@ -35,8 +35,8 @@ def osd_size():
     try:
         from enigma import getDesktop
         d = getDesktop(0)
-        w = d.size().width()
-        h = d.size().height()
+        w = int(d.size().width())
+        h = int(d.size().height())
     except Exception:
         w, h = REF_W, REF_H
     _cached_size = (w, h)
@@ -106,7 +106,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets=""):
         header_x, scale_y(40), scale(500), scale_y(56), font(28), GOLD, BG,
         scale(48), scale_y(96), scale(1100), scale_y(34), font(22), TEXT,
         scale(48), scale_y(132), scale(1100), scale_y(20), font(14), MUTED,
-        scale(48), scale_y(162), scale(1184), scale_y(list_h), font(20),
+        scale(48), scale_y(162), scale(1184), scale_y(list_h),
         TEXT, BG, PANEL, SELECT_BG,
         scale(48), scale_y(162 + list_h + 12), scale(1184), scale_y(30),
         font(15), MUTED,

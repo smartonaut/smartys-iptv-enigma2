@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — VOD (Filme) Liste."""
+"""Smartys IPTV — VOD (Filme) Liste (mit Kategorie-Filter)."""
 
 from .screens_base import BaseListScreen
 from . import player as vlc_player
@@ -11,7 +11,7 @@ class VodListScreen(BaseListScreen):
     subtitle_text = "Video-on-Demand"
 
     def _fetch(self):
-        movies = self.api.vod_streams()
+        movies = self.api.vod_streams(self.category_id)
         return (
             [(m.get("name", "?"), m) for m in movies],
             _("%d Filme") % len(movies),

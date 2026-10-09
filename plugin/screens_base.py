@@ -15,17 +15,27 @@ from . import theme
 
 
 class BaseListScreen(Screen):
-    """Basis für Live-TV / VOD / Serien-Listen."""
+    """Basis für Live-TV / VOD / Serien-Listen.
+
+    Konstruktor akzeptiert optional category_id (Filter) und Header/Untertitel,
+    damit die Kategorie-Navigation die Folgeliste steuern kann.
+    """
 
     screen_name = "SmartysList"
     header_text = ""
     subtitle_text = ""
 
-    def __init__(self, session, cfg):
+    def __init__(self, session, cfg, category_id=None,
+                 header_text=None, subtitle_text=None):
         self.skin = theme.build_skin(self.screen_name)
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg
+        self.category_id = category_id
+        if header_text is not None:
+            self.header_text = header_text
+        if subtitle_text is not None:
+            self.subtitle_text = subtitle_text
 
         self.api = self._build_api()
 
@@ -35,8 +45,12 @@ class BaseListScreen(Screen):
         self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
-            ["OkCancelActions"],
-            {"ok": self.on_select, "cancel": self.close},
+            ["OkCancelActions", "ColorActions"],
+            {
+                "ok": self.on_select,
+                "cancel": self.close,
+                "red": self.on_red,
+            },
         )
         self.onLayoutFinish.append(self._load)
 
@@ -56,6 +70,11 @@ class BaseListScreen(Screen):
     def _on_select(self, item):
         """Wird bei OK auf einen Eintrag gerufen."""
         raise NotImplementedError
+
+    # --- optional: ROT-Taste (Aufnahme) — Standard: ignorieren ---
+
+    def on_red(self):
+        pass
 
     # --- gemeinsam ---
 

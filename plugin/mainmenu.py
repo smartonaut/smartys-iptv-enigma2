@@ -49,16 +49,25 @@ class MainMenuScreen(Screen):
             sel[1]()
 
     def open_live(self):
+        from .categories import CategoryListScreen
         from .channellist import LiveListScreen
-        self.session.open(LiveListScreen, self.cfg)
+        self.session.open(
+            CategoryListScreen, self.cfg, "live_categories",
+            LiveListScreen, "Live-TV", "Sender wählen")
 
     def open_vod(self):
+        from .categories import CategoryListScreen
         from .vodlist import VodListScreen
-        self.session.open(VodListScreen, self.cfg)
+        self.session.open(
+            CategoryListScreen, self.cfg, "vod_categories",
+            VodListScreen, "Filme", "Video-on-Demand")
 
     def open_series(self):
+        from .categories import CategoryListScreen
         from .serieslist import SeriesListScreen
-        self.session.open(SeriesListScreen, self.cfg)
+        self.session.open(
+            CategoryListScreen, self.cfg, "series_categories",
+            SeriesListScreen, "Serien", "Staffeln & Episoden")
 
     def open_settings(self):
         from .pairing import PairingScreen
