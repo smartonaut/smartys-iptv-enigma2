@@ -7,6 +7,10 @@ Enigma2 sucht den Einstiegspunkt als `plugin.py` (nicht `__init__.py`).
 from __future__ import absolute_import
 
 from Plugins.Plugin import PluginDescriptor
+# WICHTIG: Dieser Import stellt sicher, dass der PluginComponent bereits
+# initialisiert ist, bevor dieses Plugin registriert wird. Ohne ihn wird
+# das Plugin in openATV 7.6 stillschweigend nicht in die Menüs aufgenommen.
+from Components.PluginComponent import plugins  # noqa: F401
 
 
 def main(session, **kwargs):
@@ -28,7 +32,7 @@ def Plugins(**kwargs):
     import os
     icon_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "images", "logo.png")
-    result = [
+    return [
         # Plugin-Menü (Hauptmenü -> Erweiterungen/Plugins)
         PluginDescriptor(
             name="Smartys IPTV",
@@ -36,7 +40,6 @@ def Plugins(**kwargs):
             where=PluginDescriptor.WHERE_PLUGINMENU,
             icon=icon_file,
             fnc=main,
-            needsRestart=True,
         ),
         # Erweiterungs-Browser (grüne Taste)
         PluginDescriptor(
@@ -45,15 +48,11 @@ def Plugins(**kwargs):
             where=PluginDescriptor.WHERE_EXTENSIONSMENU,
             icon=icon_file,
             fnc=main,
-            needsRestart=True,
         ),
-        # Autostart/Sessionstart: Timer-Scheduler beim Start initialisieren
+        # Autostart: Timer-Scheduler beim Start initialisieren
         PluginDescriptor(
             name="Smartys IPTV (Autostart)",
-            where=[PluginDescriptor.WHERE_AUTOSTART,
-                   PluginDescriptor.WHERE_SESSIONSTART],
+            where=[PluginDescriptor.WHERE_AUTOSTART],
             fnc=sessionstart,
-            needsRestart=True,
         ),
     ]
-    return result
