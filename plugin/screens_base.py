@@ -30,11 +30,14 @@ class BaseListScreen(Screen):
     footer = ""
     # Unterklassen setzen True, um ein EPG-Label (jetzt/danach) zu zeigen.
     epg = False
+    # Unterklassen setzen True, um eine Picon-Pixmap (Senderlogo) zu zeigen.
+    picon = False
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
         self.skin = theme.build_skin(self.screen_name, preview=self.preview,
-                                     footer=self.footer, epg=self.epg)
+                                     footer=self.footer, epg=self.epg,
+                                     picon=self.picon)
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg

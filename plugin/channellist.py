@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Live-TV-Kanalliste (Kategorie-Filter, Aufnahme, Vorschau, EPG, Picons)."""
+"""Smartys IPTV — Live-TV-Kanalliste (Kategorie-Filter, Aufnahme, Vorschau, EPG, Picon)."""
 
 import base64
 
 from Screens.MessageBox import MessageBox
 from Components.Label import Label
-from Components.Sources.List import List
-from Components.MultiContent import MultiContentEntryText, MultiContentEntryPixmapAlphaBlend
-from enigma import eTimer, RT_HALIGN_LEFT, RT_VALIGN_CENTER
+from Components.MenuList import MenuList
+from Components.Pixmap import Pixmap
 from Tools.LoadPixmap import LoadPixmap
+from enigma import eTimer
 
 from .screens_base import BaseListScreen
 from . import player as vlc_player
@@ -41,16 +41,15 @@ class LiveListScreen(BaseListScreen):
     subtitle_text = "Sender wählen"
     preview = True
     epg = True
+    picon = True
     footer = "OK = Abspielen   ·   ROT = Aufnahme   ·   EPG = Sendeplan   ·   EXIT = Zurück"
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
         super().__init__(session, cfg, category_id, header_text, subtitle_text)
 
-        # MultiContent-Liste (Picons) statt reiner Textliste.
-        self["list"] = List([])
-
         self["epg"] = Label()
+        self["picon"] = Pixmap()
 
         # Debounce-Timer: Vorschau erst nach kurzem Verharren auf einem Sender.
         self._preview_timer = eTimer()
@@ -66,96 +65,21 @@ class LiveListScreen(BaseListScreen):
         except Exception:
             self._epg_timer.timeout.connect(self._update_epg)
 
-        # Picon-Refresh: baut die Liste neu, sobald Logos geladen sind.
+        # Picon-Timer: Logo des markierten Senders aktualisieren.
         self._picon_timer = eTimer()
         try:
-            self._picon_timer.callback.append(self._picon_refresh)
+            self._picon_timer.callback.append(self._update_picon)
         except Exception:
-            self._picon_timer.timeout.connect(self._picon_refresh)
-        self._picon_count = 0
-        self._picon_cycles = 0
+            self._picon_timer.timeout.connect(self._update_picon)
 
         self["list"].onSelectionChanged.append(self._on_selection_changed)
 
-    # --- Laden ---
-
-    def _load(self):
-        if not self.api:
-            self["list"].setList([(_("Nicht verbunden"), None)])
-            return
-        try:
-            streams = self.api.live_streams(self.category_id)
-        except Exception as e:
-            self["list"].setList([(_("Fehler: %s") % str(e), None)])
-            return
-        self._streams = streams
-        self._build_list()
-        self["status"].setText(_("%d Sender") % len(streams))
-
-        # Logos für die ersten Sender im Hintergrund laden.
-        for s in streams[:120]:
-            picon.request(s.get("stream_icon"), str(s.get("stream_id", "")))
-        self._picon_cycles = 0
-        self._picon_count = self._cached_logo_count()
-        self._picon_timer.start(1500, False)
-
-    def _build_list(self):
-        self["list"].setList([self._build_entry(s) for s in self._streams])
-
-    def _build_entry(self, s):
-        name = s.get("name", "?")
-        sid = str(s.get("stream_id", ""))
-        res = [s]  # data (dict) als erstes Element
-        logo = picon.logo_path(sid)
-        if logo:
-            try:
-                pix = LoadPixmap(logo)
-                if pix:
-                    res.append(MultiContentEntryPixmapAlphaBlend(
-                        pos=(6, 5), size=(32, 32), png=pix))
-            except Exception:
-                pass
-        res.append(MultiContentEntryText(
-            pos=(48, 2), size=(700, 34), font=0,
-            flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER, text=name))
-        return res
-
-    @staticmethod
-    def _cached_logo_count():
-        try:
-            import os
-            return len([f for f in os.listdir(picon.CACHE_DIR)
-                        if f.endswith(".png")])
-        except Exception:
-            return 0
-
-    def _picon_refresh(self):
-        """Baut die Liste neu, wenn neue Logos geladen wurden."""
-        self._picon_cycles += 1
-        cnt = self._cached_logo_count()
-        if cnt != self._picon_count:
-            self._picon_count = cnt
-            self._build_list()
-        if self._picon_cycles >= 20:
-            self._picon_timer.stop()
-
     def _fetch(self):
-        # Wird nicht mehr genutzt (überschrieben durch _load).
-        return [], ""
-
-    # --- Auswahl ---
-
-    def _current_stream(self):
-        sel = self["list"].getCurrent()
-        if not sel or not sel[0]:
-            return None
-        return sel[0]
-
-    def on_select(self):
-        ch = self._current_stream()
-        if not ch:
-            return
-        self._on_select(ch)
+        streams = self.api.live_streams(self.category_id)
+        return (
+            [(s.get("name", "?"), s) for s in streams],
+            _("%d Sender") % len(streams),
+        )
 
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
@@ -169,9 +93,16 @@ class LiveListScreen(BaseListScreen):
                                stream_id=stream_id, api=self.api)
 
     def _on_selection_changed(self):
-        # Vorschau + EPG verzögert starten, damit schnelles Scrollen nicht ruckelt.
+        # Vorschau + EPG + Picon verzögert starten.
         self._preview_timer.start(600, True)
         self._epg_timer.start(300, True)
+        self._picon_timer.start(150, True)
+
+    def _current_stream(self):
+        sel = self["list"].getCurrent()
+        if not sel or not sel[1]:
+            return None
+        return sel[1]
 
     def _preview_tick(self):
         """Spielt den markierten Sender im Pig-Fenster ab (Live-Vorschau)."""
@@ -180,6 +111,23 @@ class LiveListScreen(BaseListScreen):
             return
         url = self.api.creds.stream_url(ch.get("stream_id"), "ts")
         vlc_player.play_service(self.session, url)
+
+    def _update_picon(self):
+        """Lädt/zeigt das Senderlogo des markierten Senders."""
+        ch = self._current_stream()
+        if not ch:
+            return
+        sid = str(ch.get("stream_id", ""))
+        icon_url = ch.get("stream_icon", "")
+        picon.request(icon_url, sid)
+        path = picon.logo_path(sid)
+        if picon.has_logo(sid):
+            try:
+                pix = LoadPixmap(path)
+                if pix:
+                    self["picon"].instance.setPixmap(pix)
+            except Exception:
+                pass
 
     def _update_epg(self):
         """Lädt short_epg und zeigt 'Jetzt / Danach' unter der Liste."""
@@ -209,8 +157,6 @@ class LiveListScreen(BaseListScreen):
             self["epg"].setText(txt)
         except Exception:
             self["epg"].setText(_("Keine EPG-Daten"))
-
-    # --- Aktionen ---
 
     def on_red(self):
         """ROT = Aufnahme starten/stoppen für den markierten Sender."""
