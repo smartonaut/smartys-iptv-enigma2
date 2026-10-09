@@ -1,69 +1,45 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Wiedergabe über Enigma2-Service (exteplayer3).
+"""Smartys IPTV — Wiedergabe über Enigma2-Service (exteplayer3 via serviceapp).
 
-Der Stream wird über session.nav.playService mit Servicetype 5002
-(exteplayer3 via serviceapp) abgespielt. So übernimmt Enigma2 das
-Video-Handling korrekt (Menü schließen, Video-Layer einblenden, OSD).
+Der Stream wird über session.nav.playService(eServiceReference(5002, 0, url))
+abgespielt. Servicetype 5002 = exteplayer3 (via serviceapp) — Enigma2 übernimmt
+den Video-Decoder korrekt und zeigt das Video.
 
-Der User-Agent kommt aus /etc/enigma2/exteplayer3.cfg (JSON),
-nicht als -u Parameter — serviceapp ruft exteplayer3 ohne eigene Args auf.
+exteplayer3 spielt den Stream auch ohne expliziten User-Agent (bewiesen:
+PLAYBACK_OPEN sts:0). Der 407 betraf nur GStreamer/wget, nicht exteplayer3.
+
+WICHTIG: Der Aufrufer entscheidet, ob der Screen geschlossen wird:
+  - Vollbild: self.close() nach play() -> Enigma2 zeigt Video im Vollbild
+  - Vorschau: Screen offen lassen -> Pig-Widget zeigt Video im kleinen Fenster
 """
 
-import json
+import subprocess
 import os
 
-USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-              "AppleWebKit/537.36 (KHTML, like Gecko) "
-              "Chrome/145.0.0.0 Safari/537.36")
-
-EXTPLAYER3_CFG = "/etc/enigma2/exteplayer3.cfg"
-
+EXTPLAYER3 = "/usr/bin/exteplayer3"
 SERVICE_EXTPLAYER3 = 5002
-SERVICE_GSTREAMER = 4097
-
-
-def ensure_user_agent():
-    """Schreibt den Browser-User-Agent in die exteplayer3-Config (JSON).
-
-    Viele Xtream-Server (line.smartytv.xyz) blocken Requests ohne
-    gültigen Browser-User-Agent mit HTTP 407. exteplayer3 liest den
-    User-Agent aus dieser Config-Datei.
-    """
-    try:
-        cfg = {}
-        if os.path.exists(EXTPLAYER3_CFG):
-            with open(EXTPLAYER3_CFG, "r") as f:
-                cfg = json.load(f)
-        if cfg.get("user-agent") != USER_AGENT:
-            cfg["user-agent"] = USER_AGENT
-            with open(EXTPLAYER3_CFG, "w") as f:
-                json.dump(cfg, f)
-    except Exception:
-        pass
 
 
 def play(session, url):
-    """Spielt die URL ab. Bevorzugt exteplayer3 (5002), sonst GStreamer (4097)."""
-    ensure_user_agent()
+    """Spielt die URL über exteplayer3-Service (5002). Liefert True bei Erfolg."""
     try:
         from enigma import eServiceReference
-    except Exception:
-        return False
-
-    # 1. exteplayer3 (5002) — bevorzugt, robust für Xtream-Streams
-    try:
         ref = eServiceReference(SERVICE_EXTPLAYER3, 0, url)
         ref.setName(url)
         session.nav.playService(ref)
         return True
     except Exception:
-        pass
+        return False
 
-    # 2. GStreamer (4097) — eingebauter Enigma2-Pfad
+
+def play_exteplayer3_direct(url):
+    """Fallback: exteplayer3 direkt (rendert auf Decoder, ohne Enigma2-Service)."""
+    if not os.path.exists(EXTPLAYER3):
+        return False
     try:
-        ref = eServiceReference(SERVICE_GSTREAMER, 0, url)
-        ref.setName(url)
-        session.nav.playService(ref)
+        subprocess.Popen([EXTPLAYER3, url],
+                         stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
         return True
     except Exception:
         return False
