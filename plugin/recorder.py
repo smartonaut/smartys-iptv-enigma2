@@ -11,6 +11,7 @@ Der User-Agent ist entscheidend (sonst 407 vom Stream-Server).
 import os
 import subprocess
 import time
+import base64
 
 try:
     from enigma import eTimer
@@ -230,20 +231,32 @@ def ask_recording(session, url, name, api=None, stream_id=None):
 
     rec = get_recorder()
 
-    # EPG-Ende ermitteln (falls verfügbar).
+    # EPG-Ende + Sendungstitel ermitteln (falls verfügbar).
     end_ts = None
     end_label = ""
+    epg_title = None
     if api and stream_id:
         try:
             data = api.short_epg(stream_id, limit=1)
             listings = data.get("epg_listings", []) or []
             if listings:
-                end_ts = int(listings[0].get("stop_timestamp", "0"))
+                now = listings[0]
+                t = now.get("title", "")
+                try:
+                    epg_title = base64.b64decode(t).decode("utf-8", "replace")
+                    if not epg_title.strip():
+                        epg_title = None
+                except Exception:
+                    epg_title = t or None
+                end_ts = int(now.get("stop_timestamp", "0"))
                 if end_ts:
                     end_label = datetime.datetime.fromtimestamp(
                         end_ts).strftime("%H:%M")
         except Exception:
             end_ts = None
+
+    # Dateiname: EPG-Titel bevorzugen, Sendername nur als Fallback.
+    rec_title = (epg_title or name).strip()
 
     choices = [(_("Endlos (bis manuell gestoppt)"), "endless")]
     if end_ts:
@@ -255,9 +268,9 @@ def ask_recording(session, url, name, api=None, stream_id=None):
         mode = result[1] if isinstance(result, (tuple, list)) else "endless"
         try:
             if mode == "epg" and end_ts:
-                path = rec.start(url, name, end_ts=end_ts)
+                path = rec.start(url, rec_title, end_ts=end_ts)
             else:
-                path = rec.start(url, name)
+                path = rec.start(url, rec_title)
         except Exception as e:
             session.open(
                 MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
