@@ -19,6 +19,8 @@ from Components.ServiceEventTracker import InfoBarBase
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 from Components.ProgressBar import ProgressBar
+from Components.Pixmap import Pixmap
+from Tools.LoadPixmap import LoadPixmap
 from enigma import eServiceReference, eTimer
 
 from . import theme
@@ -38,7 +40,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     """Vollbild-Player für einen IPTV-Stream, mit EPG-Infobar."""
 
     def __init__(self, session, url, servicetype=4097, name="",
-                 stream_id=None, api=None):
+                 stream_id=None, api=None, stream_icon=None):
         Screen.__init__(self, session)
         self.session = session
         self.streamurl = url
@@ -46,6 +48,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self.stream_name = name or ""
         self.stream_id = stream_id
         self.api = api
+        self.stream_icon = stream_icon or ""
 
         # EPG-Daten (start_timestamp / stop_timestamp / titel)
         self._epg_now = None
@@ -65,6 +68,9 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             # --- Infobar (unten) ---
             '<eLabel name="infobar_bg" position="0,%d" size="%d,%d" '
             'backgroundColor="#a0000000" zPosition="3"/>'
+            # Picon (Programm-Logo)
+            '<widget name="logo" position="%d,%d" size="%d,%d" '
+            'alphatest="blend" zPosition="4"/>'
             '<widget name="nowchannel" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="#ffffff" transparent="1" '
             'halign="left" valign="center" noWrap="1" zPosition="4"/>'
@@ -74,24 +80,33 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             '<widget name="nowtime" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="#ffffff" transparent="1" '
             'halign="right" valign="center" zPosition="4"/>'
+            '<widget name="videoinfo" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="#ffc94d" transparent="1" '
+            'halign="right" valign="center" noWrap="1" zPosition="4"/>'
             '<widget name="progress" position="%d,%d" size="%d,%d" '
             'foregroundColor="#ffc94d" backgroundColor="#20000000" '
             'zPosition="4"/>'
             '</screen>' % (
                 w, h,
-                # Infobar-Hintergrund: unten, volle Breite (position="0,%d")
+                # Infobar-Hintergrund: unten, volle Breite
                 theme.scale_y(600), w, theme.scale_y(120),
+                # logo (Picon)
+                theme.scale(20), theme.scale_y(610), theme.scale(60),
+                theme.scale_y(60),
                 # nowchannel
-                theme.scale(48), theme.scale_y(612), theme.scale(800),
+                theme.scale(110), theme.scale_y(612), theme.scale(770),
                 theme.scale_y(44), theme.font(26),
                 # nowtitle
-                theme.scale(48), theme.scale_y(656), theme.scale(800),
+                theme.scale(110), theme.scale_y(656), theme.scale(770),
                 theme.scale_y(40), theme.font(20),
                 # nowtime (rechts)
                 theme.scale(900), theme.scale_y(612), theme.scale(330),
                 theme.scale_y(44), theme.font(26),
+                # videoinfo (rechts, unter der Uhrzeit)
+                theme.scale(900), theme.scale_y(656), theme.scale(330),
+                theme.scale_y(40), theme.font(20),
                 # progress (dünner Balken)
-                theme.scale(48), theme.scale_y(668), theme.scale(800),
+                theme.scale(110), theme.scale_y(668), theme.scale(770),
                 theme.scale_y(6),
             )
         )
@@ -101,7 +116,9 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["nowchannel"] = Label()
         self["nowtitle"] = Label()
         self["nowtime"] = Label()
+        self["videoinfo"] = Label()
         self["progress"] = ProgressBar()
+        self["logo"] = Pixmap()
 
         self["actions"] = ActionMap(
             ["OkCancelActions", "DirectionActions", "ColorActions",
@@ -150,6 +167,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     def _load_epg(self):
         """Lädt short_epg und setzt Titel + Laufzeit-Daten."""
+        print("[SmartysIPTV] _load_epg api=%s stream_id=%s" % (
+            self.api is not None, self.stream_id))
         if not self.api or not self.stream_id:
             return
         try:
@@ -159,7 +178,9 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 self._epg_now = listings[0]
             if len(listings) > 1:
                 self._epg_next = listings[1]
-        except Exception:
+            print("[SmartysIPTV] EPG listings=%d" % len(listings))
+        except Exception as e:
+            print("[SmartysIPTV] EPG-Fehler: %r" % e)
             self._epg_now = None
             self._epg_next = None
         self._apply_epg()
@@ -171,7 +192,41 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         if self._epg_now:
             title = self._b64(self._epg_now.get("title", ""))
         self["nowtitle"].setText(title)
+        self._load_logo()
+        self._load_videoinfo()
         self._refresh_clock()
+
+    def _load_logo(self):
+        """Lädt das Senderlogo (Picon) und setzt das Pixmap (asynchron)."""
+        try:
+            from . import picon
+            if self.stream_icon and self.stream_id:
+                sid = str(self.stream_id)
+                if picon.has_logo(sid):
+                    self["logo"].instance.setPixmap(LoadPixmap(picon.logo_path(sid)))
+                    self["logo"].show()
+                    return
+                picon.request(self.stream_icon, sid)
+            self["logo"].hide()
+        except Exception:
+            self["logo"].hide()
+
+    def _load_videoinfo(self):
+        """Liest die Video-Auflösung aus dem laufenden Stream."""
+        try:
+            from enigma import iServiceInformation
+            service = self.session.nav.getCurrentService()
+            if service:
+                info = service.info()
+                w = info.getInfo(iServiceInformation.sVideoWidth)
+                h = info.getInfo(iServiceInformation.sVideoHeight)
+                if w and h:
+                    self["videoinfo"].setText("%dx%d" % (w, h))
+                    self["videoinfo"].show()
+                    return
+            self["videoinfo"].hide()
+        except Exception:
+            self["videoinfo"].hide()
 
     def _refresh_clock(self):
         """Aktualisiert Uhrzeit + Laufzeit-Balken."""
@@ -199,6 +254,10 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         else:
             self["progress"].hide()
 
+        # Logo + Auflösung nachziehen (asynchron geladen, erst nach Streamstart).
+        self._load_logo()
+        self._load_videoinfo()
+
     @staticmethod
     def _b64(s):
         try:
@@ -216,7 +275,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     def _show_infobar(self):
         self._infobar_visible = True
-        for w in ("nowchannel", "nowtitle", "nowtime", "progress", "infobar_bg"):
+        for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
+                  "progress", "infobar_bg"):
             try:
                 self[w].show()
             except Exception:
@@ -227,7 +287,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     def _hide_infobar(self):
         self._infobar_visible = False
-        for w in ("nowchannel", "nowtitle", "nowtime", "progress", "infobar_bg"):
+        for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
+                  "progress", "infobar_bg", "logo"):
             try:
                 self[w].hide()
             except Exception:

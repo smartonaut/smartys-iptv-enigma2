@@ -90,15 +90,17 @@ class LiveListScreen(BaseListScreen):
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
         name = ch.get("name", "")
+        stream_icon = ch.get("stream_icon", "")
         url = self.api.creds.stream_url(stream_id, "ts")
         recorder.confirm_if_recording(
             self.session,
-            lambda: self._open_player(url, name, stream_id))
+            lambda: self._open_player(url, name, stream_id, stream_icon))
 
-    def _open_player(self, url, name="", stream_id=None):
+    def _open_player(self, url, name="", stream_id=None, stream_icon=None):
         """Vollbild: StreamPlayer-Screen öffnen (rendert das Video + EPG)."""
         vlc_player.open_player(self.session, url, name=name,
-                               stream_id=stream_id, api=self.api)
+                               stream_id=stream_id, api=self.api,
+                               stream_icon=stream_icon)
 
     def _on_selection_changed(self):
         # Vorschau + EPG + Picon verzögert starten.

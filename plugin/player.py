@@ -30,7 +30,8 @@ def play_service(session, url, servicetype=SERVICE_GSTREAMER):
 
 
 def open_player(session, url, servicetype=SERVICE_GSTREAMER, name="",
-                stream_id=None, api=None):
+                stream_id=None, api=None, stream_icon=None):
     """Öffnet den Vollbild-StreamPlayer-Screen (mit EPG-Infobar)."""
     from .streamplayer import StreamPlayerScreen
-    session.open(StreamPlayerScreen, url, servicetype, name, stream_id, api)
+    session.open(StreamPlayerScreen, url, servicetype, name, stream_id,
+                 api, stream_icon)
