@@ -79,6 +79,23 @@ class LiveListScreen(BaseListScreen):
             self._picon_timer.timeout.connect(self._update_picon)
 
         self["list"].onSelectionChanged.append(self._on_selection_changed)
+        # Beim Verlassen der Liste: Vorschau stoppen (läuft sonst im
+        # Hintergrund weiter) und Debounce-Timer abmelden (die würden
+        # nach dem Close auf zerstörte Widgets zugreifen).
+        self._preview_started = False
+        self.onClose.append(self._on_close)
+
+    def _on_close(self):
+        for t in (self._preview_timer, self._epg_timer, self._picon_timer):
+            try:
+                t.stop()
+            except Exception:
+                pass
+        if self._preview_started:
+            try:
+                self.session.nav.stopService()
+            except Exception:
+                pass
 
     def _fetch(self):
         streams = self.api.live_streams(self.category_id)
@@ -120,7 +137,8 @@ class LiveListScreen(BaseListScreen):
         if not ch:
             return
         url = self.api.creds.stream_url(ch.get("stream_id"), "ts")
-        vlc_player.play_service(self.session, url)
+        if vlc_player.play_service(self.session, url):
+            self._preview_started = True
 
     def _update_picon(self):
         """Lädt/zeigt das Senderlogo des markierten Senders."""
