@@ -56,7 +56,8 @@ def download_trailer(url):
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
     try:
-        cmd = ["yt-dlp", "-f", "bestvideo[height<=480]+bestaudio/best",
+        cmd = ["yt-dlp", "-f",
+               "bestvideo[height<=480][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=480]+bestaudio/best",
                "--merge-output-format", "mp4", "--no-playlist",
                "-o", path, url]
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
