@@ -64,16 +64,7 @@ def _download(icon_url, stream_id):
             # VOD-Cover kommen oft als JPEG (tmdb.org); LoadPixmap erwartet
             # aber ein echtes PNG. JPEG-Bytes -> PNG konvertieren.
             if data[:2] == b"\xff\xd8":
-                try:
-                    import io
-                    from PIL import Image
-                    img = Image.open(io.BytesIO(data))
-                    img = img.convert("RGBA")
-                    buf = io.BytesIO()
-                    img.save(buf, "PNG")
-                    data = buf.getvalue()
-                except Exception:
-                    pass  # Fallback: rohe Bytes behalten
+                data = _jpeg_to_png(data, path)
             tmp = path + ".part"
             with open(tmp, "wb") as f:
                 f.write(data)
@@ -81,6 +72,44 @@ def _download(icon_url, stream_id):
         return path
     except Exception:
         return None
+
+
+def _jpeg_to_png(data, path):
+    """Konvertiert JPEG-Bytes nach PNG (PIL, Fallback ffmpeg)."""
+    # 1. PIL (schnell, aber auf manchen Boxen mit Mapping-Fehler)
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        img = img.convert("RGBA")
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        return buf.getvalue()
+    except Exception:
+        pass
+    # 2. ffmpeg (robust, kein PIL nötig)
+    try:
+        import subprocess
+        jpg = path + ".jpg"
+        png = path + ".new.png"
+        with open(jpg, "wb") as f:
+            f.write(data)
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", jpg, png],
+                       check=True, timeout=15)
+        with open(png, "rb") as f:
+            out = f.read()
+        try:
+            os.remove(jpg)
+        except Exception:
+            pass
+        try:
+            os.remove(png)
+        except Exception:
+            pass
+        return out
+    except Exception:
+        pass
+    return data  # Fallback: rohe JPEG-Bytes
 
 
 def _worker_loop():
