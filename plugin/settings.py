@@ -3,6 +3,7 @@
 
 from Screens.Screen import Screen
 from Components.ActionMap import ActionMap
+from Components.Label import Label
 from Components.MenuList import MenuList
 
 from . import theme
@@ -19,15 +20,19 @@ OPTIONS = [
 
 class SettingsScreen(Screen):
     def __init__(self, session):
+        # WICHTIG: Skin muss VOR Screen.__init__ gesetzt werden, sonst baut
+        # Enigma2 den Screen mit dem Default-Skin (siehe alle anderen Screens).
+        self.skin = theme.build_skin(
+            "SmartysSettings", logo=True,
+            footer="OK = Ändern   ·   EXIT = Zurück")
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()
 
-        self.skin = theme.build_skin(
-            "SmartysSettings", logo=True,
-            footer="OK = Ändern   ·   EXIT = Zurück")
-
+        self["header"] = Label(_("Einstellungen"))
+        self["subtitle"] = Label(_("Optionen"))
         self["list"] = MenuList([])
+        self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
             ["OkCancelActions"],
