@@ -219,7 +219,10 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 sid = str(self.stream_id)
                 if picon.has_logo(sid):
                     self["logo"].instance.setPixmap(LoadPixmap(picon.logo_path(sid)))
-                    self["logo"].show()
+                    if self._infobar_visible:
+                        self["logo"].show()
+                    else:
+                        self["logo"].hide()
                     return
                 picon.request(self.stream_icon, sid)
             self["logo"].hide()
@@ -237,7 +240,10 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 h = info.getInfo(iServiceInformation.sVideoHeight)
                 if w and h:
                     self["videoinfo"].setText("%dx%d" % (w, h))
-                    self["videoinfo"].show()
+                    if self._infobar_visible:
+                        self["videoinfo"].show()
+                    else:
+                        self["videoinfo"].hide()
                     return
             self["videoinfo"].hide()
         except Exception:
@@ -261,7 +267,10 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                     elapsed = now_ts - start
                     pct = max(0, min(100, int(elapsed * 100 / total)))
                     self["progress"].setValue(pct)
-                    self["progress"].show()
+                    if self._infobar_visible:
+                        self["progress"].show()
+                    else:
+                        self["progress"].hide()
                 else:
                     self["progress"].hide()
             except Exception:
