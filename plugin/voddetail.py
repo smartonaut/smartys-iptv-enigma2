@@ -193,11 +193,41 @@ class VodDetailScreen(Screen):
                 MessageBox.TYPE_INFO, timeout=4)
             return
         self["status"].setText(_("Lade Trailer …"))
-        path = vlc_player.download_trailer(self._trailer)
-        if not path:
-            self.session.open(
-                MessageBox, _("Trailer konnte nicht geladen werden."),
-                MessageBox.TYPE_ERROR, timeout=4)
-            self["status"].setText(_("GELB = Trailer ansehen"))
-            return
-        vlc_player.open_player(self.session, path, name="Trailer")
+        self._trailer_result = {}
+
+        # Download im Hintergrund-Thread — sonst friert der Mainloop bis zu
+        # 180 s ein (yt-dlp + Merge), und die Box wirkt tot.
+        def _download():
+            self._trailer_result["path"] = vlc_player.download_trailer(
+                self._trailer)
+
+        import threading
+        threading.Thread(target=_download, daemon=True).start()
+
+        # eTimer pollt das Ergebnis und öffnet den Player im Mainloop.
+        def _poll():
+            if "path" not in self._trailer_result:
+                try:
+                    self._trailer_timer.start(300, True)
+                except Exception:
+                    pass
+                return
+            try:
+                self._trailer_timer.stop()
+            except Exception:
+                pass
+            path = self._trailer_result.get("path")
+            if not path:
+                self.session.open(
+                    MessageBox, _("Trailer konnte nicht geladen werden."),
+                    MessageBox.TYPE_ERROR, timeout=4)
+                self["status"].setText(_("GELB = Trailer ansehen"))
+                return
+            vlc_player.open_player(self.session, path, name="Trailer")
+
+        self._trailer_timer = eTimer()
+        try:
+            self._trailer_timer.callback.append(_poll)
+        except Exception:
+            self._trailer_timer.timeout.connect(_poll)
+        self._trailer_timer.start(300, True)
