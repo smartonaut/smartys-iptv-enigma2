@@ -1,61 +1,256 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Serienliste (Serien → Episoden, mit Kategorie-Filter)."""
+"""Smartys IPTV — Serien (Cover + Liste + Detailseite mit Episoden).
 
-from .screens_base import BaseListScreen
+Nach dem Vorbild der Film-Ansicht: großes Cover links, Liste rechts;
+Detailseite mit Cover + Beschreibung; OK öffnet die Episoden-Liste.
+"""
+
+import base64
+import os
+
+from Screens.Screen import Screen
+from Components.ActionMap import ActionMap
+from Components.Label import Label
+from Components.MenuList import MenuList
+from Components.Pixmap import Pixmap
+from Tools.LoadPixmap import LoadPixmap
+
+from . import theme
+from . import picon
 from . import player as vlc_player
+from .api import Credentials, XtreamApi
 
 
-class SeriesListScreen(BaseListScreen):
-    screen_name = "SmartysSeriesList"
-    header_text = "Serien"
-    subtitle_text = "Staffeln & Episoden"
-    footer = "OK = Öffnen   ·   EXIT = Zurück"
+def _b64(s):
+    try:
+        return base64.b64decode(s).decode("utf-8", "replace")
+    except Exception:
+        return s or ""
 
-    def _fetch(self):
-        series = self.api.series_streams(self.category_id)
-        return (
-            [(s.get("name", "?"), s) for s in series],
-            _("%d Serien") % len(series),
+
+def _wrap(text, width=52):
+    if not text:
+        return ""
+    words = text.split()
+    lines = []
+    cur = ""
+    for w in words:
+        if len(cur) + len(w) + 1 > width:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = (cur + " " + w).strip()
+    if cur:
+        lines.append(cur)
+    return "\n".join(lines[:10])
+
+
+def _build_api(cfg):
+    providers = cfg.providers() if cfg else []
+    if not providers:
+        return None
+    p = providers[0]
+    return XtreamApi(Credentials(p["server_url"], p["username"], p["password"]))
+
+
+class SeriesListScreen(Screen):
+    """Serien-Liste: Poster links, Liste rechts."""
+
+    def __init__(self, session, cfg, category_id=None,
+                 header_text=None, subtitle_text=None):
+        w, h = theme.osd_size()
+        bg = theme._images_dir()
+        self._header = header_text or "Serien"
+        self._subtitle = subtitle_text or "Staffeln & Episoden"
+        self.skin = (
+            '<screen name="SmartysSeriesList" position="0,0" size="%d,%d" '
+            'backgroundColor="%s" flags="wfNoBorder">'
+            '<ePixmap pixmap="%s/background.png" position="0,0" size="%d,%d" '
+            'alphatest="off" zPosition="-1"/>'
+            '<eLabel text="Smartys IPTV" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" zPosition="2"/>'
+            '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" '
+            'zPosition="2"/>'
+            '<widget name="header" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" zPosition="2"/>'
+            '<widget name="subtitle" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" zPosition="2"/>'
+            '<widget name="poster" position="%d,%d" size="%d,%d" '
+            'alphatest="blend" zPosition="2"/>'
+            '<widget name="list" position="%d,%d" size="%d,%d" '
+            'render="Listbox" itemHeight="%d" scrollbarMode="showOnDemand" '
+            'foregroundColor="%s" foregroundColorSelected="%s" '
+            'backgroundColor="%s" backgroundColorSelected="%s" '
+            'transparent="1" zPosition="2"/>'
+            '<widget name="status" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" zPosition="2"/>'
+            '</screen>' % (
+                w, h, theme.BG, bg, w, h,
+                theme.scale(48), theme.scale_y(40), theme.scale(500),
+                theme.scale_y(56), theme.font(28), theme.GOLD,
+                theme.scale(48), theme.scale_y(158), theme.scale(200),
+                theme.scale_y(3), theme.GOLD,
+                theme.scale(48), theme.scale_y(96), theme.scale(1100),
+                theme.scale_y(34), theme.font(22), theme.TEXT,
+                theme.scale(48), theme.scale_y(132), theme.scale(1100),
+                theme.scale_y(20), theme.font(14), theme.MUTED,
+                theme.scale(60), theme.scale_y(180), theme.scale(200),
+                theme.scale_y(300),
+                theme.scale(300), theme.scale_y(180), theme.scale(920),
+                theme.scale_y(400), theme.scale(38),
+                theme.TEXT, theme.GOLD, theme.PANEL, theme.SELECT_BG,
+                theme.scale(48), theme.scale_y(600), theme.scale(1184),
+                theme.scale_y(30), theme.font(15), theme.MUTED,
+            )
         )
+        Screen.__init__(self, session)
+        self.session = session
+        self.cfg = cfg
+        self.category_id = category_id
+        self.api = _build_api(cfg)
 
-    def _on_select(self, item):
-        series_id = item.get("series_id")
-        self.session.open(EpisodeListScreen, self.api, series_id)
+        self["header"] = Label(_(self._header))
+        self["subtitle"] = Label(_(self._subtitle))
+        self["list"] = MenuList([])
+        self["status"] = Label(_(""))
+        self["poster"] = Pixmap()
+
+        self["actions"] = ActionMap(
+            ["OkCancelActions", "ColorActions"],
+            {"ok": self.on_select, "cancel": self.close},
+        )
+        self["list"].onSelectionChanged.append(self._on_selection_changed)
+        self.onLayoutFinish.append(self._load)
+
+    def _load(self):
+        if not self.api:
+            self["list"].setList([(_("Nicht verbunden"), None)])
+            return
+        try:
+            series = self.api.series_streams(self.category_id)
+        except Exception as e:
+            self["list"].setList([(_("Fehler: %s") % str(e), None)])
+            return
+        self["list"].setList([(s.get("name", "?"), s) for s in series])
+        self["status"].setText(_("%d Serien") % len(series))
+        self._on_selection_changed()
+
+    def _on_selection_changed(self):
+        sel = self["list"].getCurrent()
+        if not sel or not sel[1]:
+            self["poster"].hide()
+            return
+        item = sel[1]
+        cover = item.get("cover", "") or ""
+        if not cover:
+            self["poster"].hide()
+            return
+        try:
+            path = picon._download(cover, "vod_%s" % item.get("series_id"),
+                                   size=(theme.scale(200), theme.scale_y(300)))
+            if path and os.path.exists(path):
+                self["poster"].instance.setPixmap(LoadPixmap(path))
+                self["poster"].show()
+                return
+        except Exception:
+            pass
+        self["poster"].hide()
+
+    def on_select(self):
+        sel = self["list"].getCurrent()
+        if not sel or not sel[1]:
+            return
+        item = sel[1]
+        from .seriesdetail import SeriesDetailScreen
+        self.session.open(SeriesDetailScreen, self.api, item)
 
 
-class EpisodeListScreen(BaseListScreen):
-    screen_name = "SmartysEpisodes"
-    header_text = "Episoden"
-    subtitle_text = ""
+class EpisodeListScreen(Screen):
+    """Episoden-Liste (Staffeln/Episoden), OK = abspielen."""
 
-    def __init__(self, session, api, series_id):
-        # Episode-Screen erhält die fertige API statt cfg
+    def __init__(self, session, api, series_id, name=""):
+        w, h = theme.osd_size()
+        bg = theme._images_dir()
         self._series_id = series_id
-        self._api_override = api
-        super().__init__(session, None)
+        self._name = name
+        self.api = api
+        self.skin = (
+            '<screen name="SmartysEpisodes" position="0,0" size="%d,%d" '
+            'backgroundColor="%s" flags="wfNoBorder">'
+            '<ePixmap pixmap="%s/background.png" position="0,0" size="%d,%d" '
+            'alphatest="off" zPosition="-1"/>'
+            '<eLabel text="Smartys IPTV" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" zPosition="2"/>'
+            '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" '
+            'zPosition="2"/>'
+            '<widget name="header" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="left" valign="center" noWrap="1" zPosition="2"/>'
+            '<widget name="list" position="%d,%d" size="%d,%d" '
+            'render="Listbox" itemHeight="%d" scrollbarMode="showOnDemand" '
+            'foregroundColor="%s" foregroundColorSelected="%s" '
+            'backgroundColor="%s" backgroundColorSelected="%s" '
+            'transparent="1" zPosition="2"/>'
+            '<widget name="status" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" transparent="1" '
+            'halign="center" valign="center" zPosition="2"/>'
+            '</screen>' % (
+                w, h, theme.BG, bg, w, h,
+                theme.scale(48), theme.scale_y(40), theme.scale(500),
+                theme.scale_y(56), theme.font(28), theme.GOLD,
+                theme.scale(48), theme.scale_y(158), theme.scale(200),
+                theme.scale_y(3), theme.GOLD,
+                theme.scale(48), theme.scale_y(96), theme.scale(1100),
+                theme.scale_y(40), theme.font(24), theme.TEXT,
+                theme.scale(48), theme.scale_y(160), theme.scale(1184),
+                theme.scale_y(430), theme.scale(40),
+                theme.TEXT, theme.GOLD, theme.PANEL, theme.SELECT_BG,
+                theme.scale(48), theme.scale_y(620), theme.scale(1184),
+                theme.scale_y(30), theme.font(15), theme.MUTED,
+            )
+        )
+        Screen.__init__(self, session)
+        self.session = session
+        self["header"] = Label(_(name))
+        self["list"] = MenuList([])
+        self["status"] = Label(_(""))
 
-    def _build_api(self):
-        return self._api_override
+        self["actions"] = ActionMap(
+            ["OkCancelActions"],
+            {"ok": self.on_select, "cancel": self.close},
+        )
+        self.onLayoutFinish.append(self._load)
 
-    def _fetch(self):
-        info = self.api.series_info(self._series_id)
+    def _load(self):
+        try:
+            info = self.api.series_info(self._series_id)
+        except Exception:
+            info = {}
         eps = info.get("episodes") or {}
         flat = []
-        for season, ep_list in eps.items():
-            for ep in ep_list:
+        for season in sorted(eps.keys()):
+            for ep in eps[season]:
                 ep = dict(ep)
                 ep["_season"] = season
                 flat.append(ep)
-        return (
-            [("S%sE%s — %s" % (
+        self["list"].setList([
+            ("S%sE%s — %s" % (
                 e.get("_season", "?"),
                 e.get("episode_num", "?"),
-                e.get("title") or ""), e) for e in flat],
-            _("%d Episoden") % len(flat),
-        )
+                _b64(e.get("title") or "")), e) for e in flat])
+        self["status"].setText(_("%d Episoden") % len(flat))
 
-    def _on_select(self, item):
+    def on_select(self):
+        sel = self["list"].getCurrent()
+        if not sel or not sel[1]:
+            return
+        item = sel[1]
         ep_id = item.get("id")
         ext = item.get("container_extension") or "mp4"
         url = self.api.creds.series_url(ep_id, ext)
-        vlc_player.open_player(self.session, url)
+        vlc_player.open_player(self.session, url, name=self._name)
