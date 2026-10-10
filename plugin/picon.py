@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Senderlogo (Picon) Downloader mit Cache.
+"""Smartys IPTV — Senderlogo/Cover Downloader mit Cache.
 
-Lädt stream_icon-Logos asynchron in ein Cache-Verzeichnis. Die Liste zeigt
-die Logos an, sobald sie da sind (Refresh-Timer prüft den Cache).
+Speichert Bilder mit korrekter Endung (JPEG -> .jpg, PNG -> .png),
+damit LoadPixmap sie direkt laden kann. Keine Konvertierung nötig —
+LoadPixmap (ePicLoad) erkennt das Format über die Magic-Bytes.
 """
 
 import os
@@ -32,84 +33,50 @@ def _ensure_cache():
         pass
 
 
+def _cache_base(stream_id):
+    return os.path.join(CACHE_DIR, str(stream_id))
+
+
 def logo_path(stream_id):
-    return os.path.join(CACHE_DIR, "%s.png" % stream_id)
+    """Liefert den Cache-Pfad (prüft .png und .jpg)."""
+    base = _cache_base(stream_id)
+    for ext in (".png", ".jpg"):
+        p = base + ext
+        if os.path.exists(p):
+            return p
+    return base + ".png"
 
 
 def has_logo(stream_id):
-    return os.path.exists(logo_path(stream_id))
+    base = _cache_base(stream_id)
+    return os.path.exists(base + ".png") or os.path.exists(base + ".jpg")
 
 
 def _download(icon_url, stream_id):
-    """Lädt ein Logo/Cover synchron (mit Cache), konvertiert JPEG -> PNG."""
-    path = logo_path(stream_id)
-    if os.path.exists(path):
-        # Alte Cache-Datei: falls noch JPEG-Bytes (vor dem PNG-Fix gespeichert),
-        # neu laden + konvertieren.
-        try:
-            with open(path, "rb") as f:
-                head = f.read(2)
-            if head == b"\xff\xd8":
-                os.remove(path)
-            else:
-                return path
-        except Exception:
-            return path
+    """Lädt ein Bild synchron (mit Cache), speichert mit korrekter Endung."""
+    base = _cache_base(stream_id)
+    for ext in (".png", ".jpg"):
+        p = base + ext
+        if os.path.exists(p):
+            return p
     _ensure_cache()
     try:
         req = urllib.request.Request(icon_url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=8, context=_SSL_CTX) as r:
             data = r.read()
-        if data:
-            # VOD-Cover kommen oft als JPEG (tmdb.org); LoadPixmap erwartet
-            # aber ein echtes PNG. JPEG-Bytes -> PNG konvertieren.
-            if data[:2] == b"\xff\xd8":
-                data = _jpeg_to_png(data, path)
-            tmp = path + ".part"
-            with open(tmp, "wb") as f:
-                f.write(data)
-            os.replace(tmp, path)
+        if not data:
+            return None
+        # Endung aus den Magic-Bytes bestimmen (JPEG vs. PNG/andere).
+        is_jpeg = data[:2] == b"\xff\xd8"
+        ext = ".jpg" if is_jpeg else ".png"
+        path = base + ext
+        tmp = path + ".part"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
         return path
     except Exception:
         return None
-
-
-def _jpeg_to_png(data, path):
-    """Konvertiert JPEG-Bytes nach PNG (PIL, Fallback ffmpeg)."""
-    # 1. PIL (schnell, aber auf manchen Boxen mit Mapping-Fehler)
-    try:
-        import io
-        from PIL import Image
-        img = Image.open(io.BytesIO(data))
-        img = img.convert("RGBA")
-        buf = io.BytesIO()
-        img.save(buf, "PNG")
-        return buf.getvalue()
-    except Exception:
-        pass
-    # 2. ffmpeg (robust, kein PIL nötig)
-    try:
-        import subprocess
-        jpg = path + ".jpg"
-        png = path + ".new.png"
-        with open(jpg, "wb") as f:
-            f.write(data)
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", jpg, png],
-                       check=True, timeout=15)
-        with open(png, "rb") as f:
-            out = f.read()
-        try:
-            os.remove(jpg)
-        except Exception:
-            pass
-        try:
-            os.remove(png)
-        except Exception:
-            pass
-        return out
-    except Exception:
-        pass
-    return data  # Fallback: rohe JPEG-Bytes
 
 
 def _worker_loop():
