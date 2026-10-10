@@ -229,11 +229,20 @@ class EpisodeListScreen(Screen):
     def _load(self):
         try:
             info = self.api.series_info(self._series_id)
-        except Exception:
-            info = {}
+        except Exception as e:
+            self["list"].setList([(_("Fehler: %s") % str(e), None)])
+            return
         eps = info.get("episodes") or {}
+
+        def _season_key(k):
+            """Numerische Staffel-Sortierung ('10' würde sonst vor '2' stehen)."""
+            try:
+                return (0, int(k), "")
+            except (TypeError, ValueError):
+                return (1, 0, str(k))
+
         flat = []
-        for season in sorted(eps.keys()):
+        for season in sorted(eps.keys(), key=_season_key):
             for ep in eps[season]:
                 ep = dict(ep)
                 ep["_season"] = season
