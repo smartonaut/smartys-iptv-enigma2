@@ -57,6 +57,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         # Timeshift (Pause = automatische Aufnahme in den Buffer).
         self._timeshift_proc = None
         self._timeshift_path = None
+        self._ts_end_timer = None
 
         w, h = theme.osd_size()
         # Transparenter Vollbild-Skin + Infobar unten.
@@ -386,30 +387,61 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             self.session.nav.stopService()
         except Exception:
             pass
-        self["nowtitle"].setText(_("Timeshift: Aufnahme läuft"))
+        self["nowtitle"].setText(_("Timeshift: Aufnahme läuft bis Sendungsende"))
         self["nowtime"].setText("")
         self["progress"].setValue(0)
         self._show_infobar()
+        # ffmpeg am Sendungsende automatisch stoppen (falls EPG-Ende bekannt).
+        self._schedule_timeshift_end()
 
-    def _resume_timeshift(self):
-        if self._timeshift_proc is not None:
+    def _schedule_timeshift_end(self):
+        """Stoppt die Timeshift-Aufnahme am EPG-Sendungsende (falls bekannt)."""
+        end = None
+        try:
+            if self._epg_now:
+                end = int(self._epg_now.get("stop_timestamp", "0"))
+        except Exception:
+            pass
+        self._ts_end_timer = eTimer()
+        try:
+            self._ts_end_timer.callback.append(self._stop_timeshift_proc)
+        except Exception:
+            self._ts_end_timer.timeout.connect(self._stop_timeshift_proc)
+        if end and end > time.time():
+            delay_ms = int((end - time.time()) * 1000)
             try:
-                self._timeshift_proc.terminate()
-                try:
-                    self._timeshift_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self._timeshift_proc.kill()
-                    self._timeshift_proc.wait()
+                self._ts_end_timer.start(delay_ms, True)
             except Exception:
                 pass
-            self._timeshift_proc = None
+        # Kein EPG-Ende: Aufnahme läuft, bis der Screen verlassen wird.
+
+    def _stop_timeshift_proc(self):
+        """Beendet den ffmpeg-Aufnahmeprozess (Sendungsende erreicht)."""
+        if self._timeshift_proc is None:
+            return
+        try:
+            self._timeshift_proc.terminate()
+            try:
+                self._timeshift_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._timeshift_proc.kill()
+                self._timeshift_proc.wait()
+        except Exception:
+            pass
+        self._timeshift_proc = None
+
+    def _resume_timeshift(self):
+        # ffmpeg läuft im Hintergrund weiter (Aufnahme bis Sendungsende) — wir
+        # spielen nur den wachsenden Buffer zeitversetzt ab, statt die Aufnahme
+        # zu stoppen. So kann der Nutzer die Sendung weiter verfolgen, während
+        # im Hintergrund bis zum Sendungsende aufgenommen wird.
         path = self._timeshift_path
-        self._timeshift_path = None
         if path and os.path.exists(path):
             try:
                 self.session.nav.playService(
                     eServiceReference(self.servicetype, 0, path))
-                self["nowtitle"].setText(_("Wiedergabe vom Timeshift-Buffer"))
+                self["nowtitle"].setText(
+                    _("Timeshift-Wiedergabe (Aufnahme läuft bis Sendungsende)"))
                 self._show_infobar()
             except Exception as e:
                 self.session.open(
@@ -452,6 +484,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         try:
             self._progress_timer.stop()
             self._hide_timer.stop()
+            if self._ts_end_timer is not None:
+                self._ts_end_timer.stop()
         except Exception:
             pass
         # Laufende Timeshift-Aufnahme beenden (Buffer bleibt erhalten).
