@@ -120,7 +120,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
     picon_widget = ""
     if picon:
         picon_widget = (
-            '<widget name="picon" render="Pixmap" position="%d,%d" '
+            '<widget name="picon" position="%d,%d" '
             'size="%d,%d" alphatest="blend" transparent="1" zPosition="2" />'
             % (scale(48), scale_y(600), scale(90), scale_y(90))
         )

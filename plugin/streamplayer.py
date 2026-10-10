@@ -66,7 +66,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             '<widget name="actions" position="0,0" size="1,1" '
             'transparent="1" zPosition="0"/>'
             # --- Infobar (unten) ---
-            '<widget name="infobar_bg" render="Label" position="0,%d" '
+            '<widget name="infobar_bg" position="0,%d" '
             'size="%d,%d" backgroundColor="#a0000000" zPosition="3"/>'
             # Picon (Programm-Logo)
             '<widget name="logo" position="%d,%d" size="%d,%d" '
