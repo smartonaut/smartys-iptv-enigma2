@@ -20,6 +20,11 @@ _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
 
+# Für das eigene Panel (panel.smartys.tech) Zertifikatsvalidierung aktiv lassen —
+# dort laufen die Pairing-Credentials, und das Panel hat ein gültiges
+# Let's-Encrypt-Zertifikat (Traefik). Nur die IPTV-Provider-URLs bleiben lax.
+_PANEL_SSL_CTX = ssl.create_default_context()
+
 # Browser-User-Agent (wie beim Stream) — einige Xtream-Server blocken
 # Requests ohne gültigen Browser-UA auch auf der player_api.php mit 407.
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -147,7 +152,7 @@ def pair_with_panel(player_id, pairing_pw, panel="https://panel.smartys.tech"):
         headers={"Content-Type": "application/x-www-form-urlencoded",
                  "User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as r:
+        with urllib.request.urlopen(req, timeout=10, context=_PANEL_SSL_CTX) as r:
             token = json.loads(r.read().decode("utf-8")).get("token")
     except Exception as e:
         raise ApiError("Pairing fehlgeschlagen: %s" % e)
@@ -159,7 +164,7 @@ def pair_with_panel(player_id, pairing_pw, panel="https://panel.smartys.tech"):
         panel + "/api/v1/providers",
         headers={"Authorization": "Bearer " + token, "User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(req, timeout=10, context=_SSL_CTX) as r:
+        with urllib.request.urlopen(req, timeout=10, context=_PANEL_SSL_CTX) as r:
             data = json.loads(r.read().decode("utf-8"))
     except Exception as e:
         raise ApiError("Provider-Laden fehlgeschlagen: %s" % e)
