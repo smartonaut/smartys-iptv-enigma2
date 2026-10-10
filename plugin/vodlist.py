@@ -121,6 +121,7 @@ class VodListScreen(Screen):
         self["list"].setList(
             [(m.get("name", "?"), m) for m in movies])
         self["status"].setText(_("%d Filme") % len(movies))
+        self._on_selection_changed()
 
     def _on_selection_changed(self):
         """Lädt das Poster des markierten Films."""
@@ -130,17 +131,19 @@ class VodListScreen(Screen):
             return
         item = sel[1]
         cover = item.get("stream_icon", "") or ""
+        print("[SmartysIPTV] vodlist selection: stream_icon=%s" % (cover[:80] if cover else "LEER"))
         if not cover:
             self["poster"].hide()
             return
         try:
             path = picon._download(cover, "vod_%s" % item.get("stream_id"))
+            print("[SmartysIPTV] vodlist poster path=%s" % path)
             if path and os.path.exists(path):
                 self["poster"].instance.setPixmap(LoadPixmap(path))
                 self["poster"].show()
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            print("[SmartysIPTV] vodlist poster FEHLER: %r" % e)
         self["poster"].hide()
 
     def on_select(self):

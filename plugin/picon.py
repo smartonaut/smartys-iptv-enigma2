@@ -41,7 +41,7 @@ def has_logo(stream_id):
 
 
 def _download(icon_url, stream_id):
-    """Lädt ein Logo synchron (mit Cache)."""
+    """Lädt ein Logo/Cover synchron (mit Cache), konvertiert JPEG -> PNG."""
     path = logo_path(stream_id)
     if os.path.exists(path):
         return path
@@ -51,6 +51,19 @@ def _download(icon_url, stream_id):
         with urllib.request.urlopen(req, timeout=8, context=_SSL_CTX) as r:
             data = r.read()
         if data:
+            # VOD-Cover kommen oft als JPEG (tmdb.org); LoadPixmap erwartet
+            # aber ein echtes PNG. JPEG-Bytes -> PNG konvertieren.
+            if data[:2] == b"\xff\xd8":
+                try:
+                    import io
+                    from PIL import Image
+                    img = Image.open(io.BytesIO(data))
+                    img = img.convert("RGBA")
+                    buf = io.BytesIO()
+                    img.save(buf, "PNG")
+                    data = buf.getvalue()
+                except Exception:
+                    pass  # Fallback: rohe Bytes behalten
             tmp = path + ".part"
             with open(tmp, "wb") as f:
                 f.write(data)
