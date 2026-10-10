@@ -59,7 +59,7 @@ class SettingsScreen(Screen):
         return "%s   [%s]" % (label, state)
 
     def _dir_label(self, d):
-        return "Aufnahme-Verzeichnis: %s" % d
+        return "Aufnahme-Verzeichnis: %s   (nicht änderbar)" % d
 
     def _toggle(self):
         cur = self["list"].getCurrent()
