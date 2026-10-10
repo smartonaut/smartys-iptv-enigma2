@@ -91,6 +91,10 @@ class LiveListScreen(BaseListScreen):
                 t.stop()
             except Exception:
                 pass
+        try:
+            self._epg_poll_timer.stop()
+        except Exception:
+            pass
         if self._preview_started:
             try:
                 self.session.nav.stopService()
@@ -158,14 +162,45 @@ class LiveListScreen(BaseListScreen):
                 pass
 
     def _update_epg(self):
-        """Lädt short_epg und zeigt 'Jetzt / Danach' unter der Liste."""
+        """Lädt short_epg asynchron (Thread) und zeigt 'Jetzt / Danach' unter der Liste."""
         ch = self._current_stream()
         if not ch:
             self["epg"].setText("")
             return
         stream_id = ch.get("stream_id")
-        try:
-            data = self.api.short_epg(stream_id, limit=2)
+        # Token: eine veraltete Antwort (Nutzer ist weitergescrollt) darf nicht
+        # über einem anderen Sender landen.
+        self._epg_token = getattr(self, "_epg_token", 0) + 1
+        token = self._epg_token
+
+        def _fetch():
+            try:
+                data = self.api.short_epg(stream_id, limit=2)
+            except Exception:
+                data = None
+            self._epg_result = (token, stream_id, data)
+
+        import threading
+        threading.Thread(target=_fetch, daemon=True).start()
+
+        # eTimer pollt das Ergebnis und aktualisiert das Label im Mainloop.
+        def _poll():
+            result = getattr(self, "_epg_result", None)
+            if result is None:
+                try:
+                    self._epg_poll_timer.start(200, True)
+                except Exception:
+                    pass
+                return
+            self._epg_result = None
+            tok, sid, data = result
+            cur = self._current_stream()
+            if tok != getattr(self, "_epg_token", 0) or \
+                    (cur and cur.get("stream_id") != sid):
+                return  # veraltet — Sender hat gewechselt
+            if not data:
+                self["epg"].setText(_("Keine EPG-Daten"))
+                return
             listings = data.get("epg_listings", []) or []
             if not listings:
                 self["epg"].setText(_("Keine EPG-Daten"))
@@ -183,8 +218,13 @@ class LiveListScreen(BaseListScreen):
                     _fmt_time(nxt.get("start", "")),
                 )
             self["epg"].setText(txt)
+
+        self._epg_poll_timer = eTimer()
+        try:
+            self._epg_poll_timer.callback.append(_poll)
         except Exception:
-            self["epg"].setText(_("Keine EPG-Daten"))
+            self._epg_poll_timer.timeout.connect(_poll)
+        self._epg_poll_timer.start(200, True)
 
     def on_red(self):
         """ROT = Aufnahme starten/stoppen für den markierten Sender."""
