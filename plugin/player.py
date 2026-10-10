@@ -35,3 +35,35 @@ def open_player(session, url, servicetype=SERVICE_GSTREAMER, name="",
     from .streamplayer import StreamPlayerScreen
     session.open(StreamPlayerScreen, url, servicetype, name, stream_id,
                  api, stream_icon)
+
+
+def download_trailer(url):
+    """Lädt einen Trailer (YouTube-ID oder URL) als lokale MP4-Datei.
+
+    exteplayer3 kann YouTube nicht direkt abspielen; deshalb lädt yt-dlp
+    den Trailer als gemergte MP4 (Video+Audio) herunter, die dann lokal
+    abgespielt wird. Rückgabe: lokaler Pfad oder None.
+    """
+    import hashlib
+    import os
+    import subprocess
+    if not url:
+        return None
+    if not url.startswith("http"):
+        url = "https://www.youtube.com/watch?v=%s" % url
+    key = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+    path = "/tmp/trailer_%s.mp4" % key
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    try:
+        cmd = ["yt-dlp", "-f", "bestvideo[height<=480]+bestaudio/best",
+               "--merge-output-format", "mp4", "--no-playlist",
+               "-o", path, url]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
+        proc.wait(timeout=180)
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            return path
+    except Exception:
+        pass
+    return None

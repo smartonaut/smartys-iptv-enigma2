@@ -192,4 +192,12 @@ class VodDetailScreen(Screen):
                 MessageBox, _("Kein Trailer verfügbar."),
                 MessageBox.TYPE_INFO, timeout=4)
             return
-        vlc_player.open_player(self.session, self._trailer, name="Trailer")
+        self["status"].setText(_("Lade Trailer …"))
+        path = vlc_player.download_trailer(self._trailer)
+        if not path:
+            self.session.open(
+                MessageBox, _("Trailer konnte nicht geladen werden."),
+                MessageBox.TYPE_ERROR, timeout=4)
+            self["status"].setText(_("GELB = Trailer ansehen"))
+            return
+        vlc_player.open_player(self.session, path, name="Trailer")

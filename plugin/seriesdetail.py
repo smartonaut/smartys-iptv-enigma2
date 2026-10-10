@@ -170,4 +170,12 @@ class SeriesDetailScreen(Screen):
                 MessageBox, _("Kein Trailer verfügbar."),
                 MessageBox.TYPE_INFO, timeout=4)
             return
-        vlc_player.open_player(self.session, url, name="Trailer")
+        self["status"].setText(_("Lade Trailer …"))
+        path = vlc_player.download_trailer(url)
+        if not path:
+            self.session.open(
+                MessageBox, _("Trailer konnte nicht geladen werden."),
+                MessageBox.TYPE_ERROR, timeout=4)
+            self["status"].setText(_("OK = Episoden"))
+            return
+        vlc_player.open_player(self.session, path, name="Trailer")
