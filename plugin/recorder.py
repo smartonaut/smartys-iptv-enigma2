@@ -217,6 +217,13 @@ class TimerScheduler(object):
         for t in self.timers:
             if t["done"]:
                 continue
+            # Zeitfenster verstrichen, ohne dass die Aufnahme je gestartet
+            # wurde (z.B. Box war beim Start aus) -> aufräumen, sonst bleibt
+            # der Eintrag für immer in der Timer-Liste hängen.
+            if t["proc"] is None and now >= t["end"]:
+                t["done"] = True
+                changed = True
+                continue
             # Start fällig?
             if t["proc"] is None and now >= t["start"] and now < t["end"]:
                 safe = "".join(
