@@ -42,16 +42,20 @@ def has_logo(stream_id):
     return os.path.exists(logo_path(stream_id))
 
 
-def _ffmpeg_to_png(data, base):
-    """Konvertiert JPEG-Bytes nach PNG via ffmpeg (subprocess.Popen)."""
+def _ffmpeg_to_png(data, base, size=None):
+    """Konvertiert JPEG-Bytes nach PNG via ffmpeg (subprocess.Popen),
+    optional auf die Zielgröße skaliert (scale=W:H)."""
     jpg = base + ".tmp.jpg"
     png = base + ".tmp.png"
     try:
         with open(jpg, "wb") as f:
             f.write(data)
-        proc = subprocess.Popen(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", jpg, png],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", jpg]
+        if size:
+            cmd += ["-vf", "scale=%d:%d" % (int(size[0]), int(size[1]))]
+        cmd += [png]
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
         proc.wait(timeout=20)
         if os.path.exists(png):
             with open(png, "rb") as f:
@@ -69,7 +73,7 @@ def _ffmpeg_to_png(data, base):
     return data  # Fallback: rohe Bytes
 
 
-def _download(icon_url, stream_id):
+def _download(icon_url, stream_id, size=None):
     """Lädt ein Bild synchron (mit Cache), speichert immer als PNG."""
     path = logo_path(stream_id)
     if os.path.exists(path):
@@ -82,7 +86,8 @@ def _download(icon_url, stream_id):
         if not data:
             return None
         if data[:2] == b"\xff\xd8":
-            data = _ffmpeg_to_png(data, os.path.join(CACHE_DIR, str(stream_id)))
+            data = _ffmpeg_to_png(data, os.path.join(CACHE_DIR, str(stream_id)),
+                                   size)
         tmp = path + ".part"
         with open(tmp, "wb") as f:
             f.write(data)

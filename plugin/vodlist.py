@@ -142,7 +142,8 @@ class VodListScreen(Screen):
             self["poster"].hide()
             return
         try:
-            path = picon._download(cover, "vod_%s" % item.get("stream_id"))
+            path = picon._download(cover, "vod_%s" % item.get("stream_id"),
+                                   size=(theme.scale(200), theme.scale_y(300)))
             if path and os.path.exists(path):
                 pix = LoadPixmap(path)
                 _log("setPixmap %s LoadPixmap=%s" % (path, "OK" if pix is not None else "NONE"))
