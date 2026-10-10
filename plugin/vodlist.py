@@ -45,7 +45,7 @@ class VodListScreen(Screen):
             'font="Regular;%d" foregroundColor="%s" transparent="1" '
             'halign="left" valign="center" zPosition="2"/>'
             # Poster (Cover) links
-            '<widget name="poster" render="Pixmap" position="%d,%d" '
+            '<widget name="poster" position="%d,%d" '
             'size="%d,%d" alphatest="blend" zPosition="2"/>'
             # Liste rechts
             '<widget name="list" position="%d,%d" size="%d,%d" '
@@ -125,25 +125,34 @@ class VodListScreen(Screen):
 
     def _on_selection_changed(self):
         """Lädt das Poster des markierten Films."""
+        def _log(msg):
+            try:
+                with open("/tmp/vodlist_debug.txt", "a") as f:
+                    f.write(msg + "\n")
+            except Exception:
+                pass
         sel = self["list"].getCurrent()
         if not sel or not sel[1]:
             self["poster"].hide()
             return
         item = sel[1]
         cover = item.get("stream_icon", "") or ""
-        print("[SmartysIPTV] vodlist selection: stream_icon=%s" % (cover[:80] if cover else "LEER"))
         if not cover:
+            _log("stream_icon LEER für %s" % item.get("name", "?"))
             self["poster"].hide()
             return
         try:
             path = picon._download(cover, "vod_%s" % item.get("stream_id"))
-            print("[SmartysIPTV] vodlist poster path=%s" % path)
             if path and os.path.exists(path):
-                self["poster"].instance.setPixmap(LoadPixmap(path))
+                pix = LoadPixmap(path)
+                _log("setPixmap %s LoadPixmap=%s" % (path, "OK" if pix is not None else "NONE"))
+                self["poster"].instance.setPixmap(pix)
                 self["poster"].show()
+                _log("poster.show() aufgerufen")
                 return
+            _log("kein path: %s" % path)
         except Exception as e:
-            print("[SmartysIPTV] vodlist poster FEHLER: %r" % e)
+            _log("FEHLER: %r" % e)
         self["poster"].hide()
 
     def on_select(self):

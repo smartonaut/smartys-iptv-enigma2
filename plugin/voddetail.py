@@ -68,7 +68,7 @@ class VodDetailScreen(Screen):
             'halign="left" valign="center" zPosition="2"/>'
             '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" '
             'zPosition="2"/>'
-            '<widget name="poster" render="Pixmap" position="%d,%d" '
+            '<widget name="poster" position="%d,%d" '
             'size="%d,%d" alphatest="blend" zPosition="2"/>'
             '<widget name="header" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="%s" transparent="1" '
