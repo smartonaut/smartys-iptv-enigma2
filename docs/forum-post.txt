@@ -1,0 +1,35 @@
+# Forum-Posting (BBCode) — für OpenATV-/Vu+-Foren
+
+Kopierbar für openatv-forum.de, vuplus-support.org, i-have-a-dreambox.com u. a.
+Einfach als neuen Thread einstellen. Der Download-Link ist der Backlink.
+
+---
+
+[b]Smartys IPTV — IPTV-Plugin für Enigma2 (OpenATV, VTi, BlackHole u. a.)[/b]
+
+Ein schlankes IPTV-Plugin für Enigma2-Boxen (VU+, Dreambox, GigaBlue & Co.),
+das eure Xtream-Codes-/IPTV-Lines direkt auf der Box abspielt.
+
+[b]Funktionen:[/b]
+[list]
+[*] Live-TV mit Senderlogos (Picons) und Kategorien
+[*] Vollbild-Player mit EPG-Infobar — Sendername, EPG-Titel mit Sendezeit, Fortschrittsbalken, Uhrzeit, Videoformat
+[*] Filme (VOD) mit Cover und großer Beschreibung
+[*] Serien mit Cover, Beschreibung und Episoden
+[*] Trailer direkt ansehen
+[*] Aufnahme (endlos oder bis Sendungsende) und Timer-Aufnahmen
+[*] Timeshift — Live-TV pausieren
+[/list]
+
+[b]Kompatibel mit:[/b] OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision,
+PurE2 und weiteren Enigma2-Images.
+
+[b]Installation:[/b]
+[code]opkg install /tmp/enigma2-plugin-extensions-smartysiptv_0.1.0_all.ipk[/code]
+Danach Enigma2 neu starten. Das Plugin erscheint unter „Erweiterungen" →
+„Smartys IPTV".
+
+[b]Download:[/b] [url]https://player.smartys.tech/download/enigma2[/url]
+
+[b]Hinweis:[/b] Das ist eine Alpha-Version — über Feedback und Fehlerberichte
+freue ich mich!
