@@ -25,6 +25,9 @@ USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 _queue = []
 _lock = threading.Lock()
 _worker = None
+# URLs, deren Download einmal fehlgeschlagen ist — nicht bei jedem
+# Selection-Change erneut (8s Timeout) versuchen.
+_failed = set()
 
 
 def _ensure_cache():
@@ -80,6 +83,12 @@ def _download(icon_url, stream_id, size=None):
         return path
     _ensure_cache()
     try:
+        with _lock:
+            if icon_url in _failed:
+                return None
+    except Exception:
+        pass
+    try:
         req = urllib.request.Request(icon_url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=8, context=_SSL_CTX) as r:
             data = r.read()
@@ -94,6 +103,11 @@ def _download(icon_url, stream_id, size=None):
         os.replace(tmp, path)
         return path
     except Exception:
+        try:
+            with _lock:
+                _failed.add(icon_url)
+        except Exception:
+            pass
         return None
 
 
@@ -121,7 +135,10 @@ def request(icon_url, stream_id):
     if not icon_url or not stream_id or has_logo(stream_id):
         return
     with _lock:
-        _queue.append((icon_url, stream_id))
+        # Keine Duplikate in die Queue legen (sonst lädt der Worker dieselbe
+        # fehlgeschlagene URL bei jedem Selection-Change erneut und immer wieder).
+        if (icon_url, stream_id) not in _queue:
+            _queue.append((icon_url, stream_id))
     if _worker is None:
         _worker = threading.Thread(target=_worker_loop, daemon=True)
         _worker.start()
