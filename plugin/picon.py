@@ -44,7 +44,17 @@ def _download(icon_url, stream_id):
     """Lädt ein Logo/Cover synchron (mit Cache), konvertiert JPEG -> PNG."""
     path = logo_path(stream_id)
     if os.path.exists(path):
-        return path
+        # Alte Cache-Datei: falls noch JPEG-Bytes (vor dem PNG-Fix gespeichert),
+        # neu laden + konvertieren.
+        try:
+            with open(path, "rb") as f:
+                head = f.read(2)
+            if head == b"\xff\xd8":
+                os.remove(path)
+            else:
+                return path
+        except Exception:
+            return path
     _ensure_cache()
     try:
         req = urllib.request.Request(icon_url, headers={"User-Agent": USER_AGENT})
