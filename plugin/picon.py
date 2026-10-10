@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """Smartys IPTV — Senderlogo/Cover Downloader mit Cache.
 
-Speichert Bilder mit korrekter Endung (JPEG -> .jpg, PNG -> .png),
-damit LoadPixmap sie direkt laden kann. Keine Konvertierung nötig —
-LoadPixmap (ePicLoad) erkennt das Format über die Magic-Bytes.
+Lädt stream_icon/Cover und speichert sie IMMER als PNG. VOD-Cover sind
+meist JPEG (tmdb.org); LoadPixmap rendert aber nur PNG zuverlässig,
+deshalb werden JPEGs per ffmpeg nach PNG konvertiert.
 """
 
 import os
 import ssl
+import subprocess
 import threading
 import urllib.request
 
@@ -33,32 +34,46 @@ def _ensure_cache():
         pass
 
 
-def _cache_base(stream_id):
-    return os.path.join(CACHE_DIR, str(stream_id))
-
-
 def logo_path(stream_id):
-    """Liefert den Cache-Pfad (prüft .png und .jpg)."""
-    base = _cache_base(stream_id)
-    for ext in (".png", ".jpg"):
-        p = base + ext
-        if os.path.exists(p):
-            return p
-    return base + ".png"
+    return os.path.join(CACHE_DIR, "%s.png" % stream_id)
 
 
 def has_logo(stream_id):
-    base = _cache_base(stream_id)
-    return os.path.exists(base + ".png") or os.path.exists(base + ".jpg")
+    return os.path.exists(logo_path(stream_id))
+
+
+def _ffmpeg_to_png(data, base):
+    """Konvertiert JPEG-Bytes nach PNG via ffmpeg (subprocess.Popen)."""
+    jpg = base + ".tmp.jpg"
+    png = base + ".tmp.png"
+    try:
+        with open(jpg, "wb") as f:
+            f.write(data)
+        proc = subprocess.Popen(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", jpg, png],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc.wait(timeout=20)
+        if os.path.exists(png):
+            with open(png, "rb") as f:
+                out = f.read()
+            if out[:2] == b"\x89P":  # PNG magic
+                return out
+    except Exception:
+        pass
+    finally:
+        for tmp in (jpg, png):
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+    return data  # Fallback: rohe Bytes
 
 
 def _download(icon_url, stream_id):
-    """Lädt ein Bild synchron (mit Cache), speichert mit korrekter Endung."""
-    base = _cache_base(stream_id)
-    for ext in (".png", ".jpg"):
-        p = base + ext
-        if os.path.exists(p):
-            return p
+    """Lädt ein Bild synchron (mit Cache), speichert immer als PNG."""
+    path = logo_path(stream_id)
+    if os.path.exists(path):
+        return path
     _ensure_cache()
     try:
         req = urllib.request.Request(icon_url, headers={"User-Agent": USER_AGENT})
@@ -66,10 +81,8 @@ def _download(icon_url, stream_id):
             data = r.read()
         if not data:
             return None
-        # Endung aus den Magic-Bytes bestimmen (JPEG vs. PNG/andere).
-        is_jpeg = data[:2] == b"\xff\xd8"
-        ext = ".jpg" if is_jpeg else ".png"
-        path = base + ext
+        if data[:2] == b"\xff\xd8":
+            data = _ffmpeg_to_png(data, os.path.join(CACHE_DIR, str(stream_id)))
         tmp = path + ".part"
         with open(tmp, "wb") as f:
             f.write(data)
