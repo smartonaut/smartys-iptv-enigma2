@@ -66,8 +66,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             '<widget name="actions" position="0,0" size="1,1" '
             'transparent="1" zPosition="0"/>'
             # --- Infobar (unten) ---
-            '<eLabel name="infobar_bg" position="0,%d" size="%d,%d" '
-            'backgroundColor="#a0000000" zPosition="3"/>'
+            '<widget name="infobar_bg" render="Label" position="0,%d" '
+            'size="%d,%d" backgroundColor="#a0000000" zPosition="3"/>'
             # Picon (Programm-Logo)
             '<widget name="logo" position="%d,%d" size="%d,%d" '
             'alphatest="blend" zPosition="4"/>'
@@ -125,6 +125,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["videoinfo"] = Label()
         self["progress"] = ProgressBar()
         self["logo"] = Pixmap()
+        self["infobar_bg"] = Label()
         self["help"] = Label(
             "OK = Info    ROT = Aufnahme    PAUSE = Timeshift    "
             "EXIT = Zurück")
