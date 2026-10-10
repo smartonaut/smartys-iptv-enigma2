@@ -125,12 +125,6 @@ class VodListScreen(Screen):
 
     def _on_selection_changed(self):
         """Lädt das Poster des markierten Films."""
-        def _log(msg):
-            try:
-                with open("/tmp/vodlist_debug.txt", "a") as f:
-                    f.write(msg + "\n")
-            except Exception:
-                pass
         sel = self["list"].getCurrent()
         if not sel or not sel[1]:
             self["poster"].hide()
@@ -138,7 +132,6 @@ class VodListScreen(Screen):
         item = sel[1]
         cover = item.get("stream_icon", "") or ""
         if not cover:
-            _log("stream_icon LEER für %s" % item.get("name", "?"))
             self["poster"].hide()
             return
         try:
@@ -146,14 +139,12 @@ class VodListScreen(Screen):
                                    size=(theme.scale(200), theme.scale_y(300)))
             if path and os.path.exists(path):
                 pix = LoadPixmap(path)
-                _log("setPixmap %s LoadPixmap=%s" % (path, "OK" if pix is not None else "NONE"))
-                self["poster"].instance.setPixmap(pix)
-                self["poster"].show()
-                _log("poster.show() aufgerufen")
-                return
-            _log("kein path: %s" % path)
-        except Exception as e:
-            _log("FEHLER: %r" % e)
+                if pix is not None:
+                    self["poster"].instance.setPixmap(pix)
+                    self["poster"].show()
+                    return
+        except Exception:
+            pass
         self["poster"].hide()
 
     def on_select(self):
