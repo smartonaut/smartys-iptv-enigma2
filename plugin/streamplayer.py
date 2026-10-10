@@ -86,28 +86,34 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             '<widget name="progress" position="%d,%d" size="%d,%d" '
             'foregroundColor="#ffc94d" backgroundColor="#20000000" '
             'zPosition="4"/>'
+            '<widget name="help" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="#888888" transparent="1" '
+            'halign="left" valign="center" noWrap="1" zPosition="4"/>'
             '</screen>' % (
                 w, h,
-                # Infobar-Hintergrund: unten, volle Breite
-                theme.scale_y(600), w, theme.scale_y(120),
+                # Infobar-Hintergrund: unten, volle Breite (höher für Help)
+                theme.scale_y(600), w, theme.scale_y(160),
                 # logo (Picon)
-                theme.scale(20), theme.scale_y(610), theme.scale(60),
+                theme.scale(20), theme.scale_y(608), theme.scale(60),
                 theme.scale_y(60),
                 # nowchannel
-                theme.scale(110), theme.scale_y(612), theme.scale(770),
-                theme.scale_y(44), theme.font(26),
+                theme.scale(110), theme.scale_y(610), theme.scale(770),
+                theme.scale_y(42), theme.font(26),
                 # nowtitle
                 theme.scale(110), theme.scale_y(656), theme.scale(770),
-                theme.scale_y(40), theme.font(20),
+                theme.scale_y(32), theme.font(20),
                 # nowtime (rechts)
-                theme.scale(900), theme.scale_y(612), theme.scale(330),
-                theme.scale_y(44), theme.font(26),
+                theme.scale(900), theme.scale_y(610), theme.scale(330),
+                theme.scale_y(42), theme.font(26),
                 # videoinfo (rechts, unter der Uhrzeit)
                 theme.scale(900), theme.scale_y(656), theme.scale(330),
-                theme.scale_y(40), theme.font(20),
-                # progress (dünner Balken)
-                theme.scale(110), theme.scale_y(668), theme.scale(770),
+                theme.scale_y(32), theme.font(20),
+                # progress (dünner Balken, unter dem Titel)
+                theme.scale(110), theme.scale_y(692), theme.scale(770),
                 theme.scale_y(6),
+                # help (Tastenerklärung, ganz unten)
+                theme.scale(20), theme.scale_y(706), theme.scale(1240),
+                theme.scale_y(22), theme.font(16),
             )
         )
 
@@ -119,6 +125,9 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["videoinfo"] = Label()
         self["progress"] = ProgressBar()
         self["logo"] = Pixmap()
+        self["help"] = Label(
+            "OK = Info    ROT = Aufnahme    PAUSE = Timeshift    "
+            "EXIT = Zurück")
 
         self["actions"] = ActionMap(
             ["OkCancelActions", "DirectionActions", "ColorActions",
@@ -186,11 +195,16 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self._apply_epg()
 
     def _apply_epg(self):
-        """Setzt Sendername, Titel und berechnet den Laufzeit-Balken."""
+        """Setzt Sendername, Titel (mit Sendezeit) und Laufzeit-Balken."""
         self["nowchannel"].setText(self.stream_name or "")
         title = ""
         if self._epg_now:
             title = self._b64(self._epg_now.get("title", ""))
+            start = self._epg_now.get("start_timestamp", "")
+            end = self._epg_now.get("stop_timestamp", "")
+            if start and end:
+                title = "%s   (%s - %s)" % (
+                    title, self._fmt_ts(start), self._fmt_ts(end))
         self["nowtitle"].setText(title)
         self._load_logo()
         self._load_videoinfo()
@@ -265,6 +279,15 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         except Exception:
             return s
 
+    @staticmethod
+    def _fmt_ts(ts):
+        """Formatiert einen Unix-Timestamp als HH:MM."""
+        try:
+            t = time.localtime(int(ts))
+            return "%02d:%02d" % (t.tm_hour, t.tm_min)
+        except Exception:
+            return ""
+
     # --- Infobar Show/Hide ---
 
     def toggle_infobar(self):
@@ -276,7 +299,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     def _show_infobar(self):
         self._infobar_visible = True
         for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
-                  "progress", "infobar_bg"):
+                  "progress", "help", "infobar_bg"):
             try:
                 self[w].show()
             except Exception:
@@ -288,7 +311,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     def _hide_infobar(self):
         self._infobar_visible = False
         for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
-                  "progress", "infobar_bg", "logo"):
+                  "progress", "help", "infobar_bg", "logo"):
             try:
                 self[w].hide()
             except Exception:
