@@ -176,6 +176,6 @@ class SeriesDetailScreen(Screen):
             self.session.open(
                 MessageBox, _("Trailer konnte nicht geladen werden."),
                 MessageBox.TYPE_ERROR, timeout=4)
-            self["status"].setText(_("OK = Episoden"))
+            self["status"].setText(_("OK = Episoden   ·   GELB = Trailer"))
             return
         vlc_player.open_player(self.session, path, name="Trailer")
