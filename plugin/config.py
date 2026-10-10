@@ -47,8 +47,13 @@ class Config(object):
                 os.makedirs(CONFIG_DIR)
             with open(CONFIG_FILE, "w") as f:
                 json.dump(self._data, f, indent=2)
-        except IOError:
-            pass  # Read-only rootfs etc. — nicht fatal
+        except IOError as exc:
+            # Read-only rootfs etc. — nicht fatal, aber mindestens loggen,
+            # damit Pairing-/Settings-Probleme nicht still verschluckt werden.
+            try:
+                print("[SmartysIPTV] config.save() fehlgeschlagen: %s" % exc)
+            except Exception:
+                pass
 
     # ---- Zugriff ----
     def get(self, key, default=None):
