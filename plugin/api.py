@@ -8,6 +8,7 @@ ohne zusätzliche Python-Pakete läuft.
 """
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 import ssl
@@ -47,15 +48,18 @@ class Credentials(object):
 
     def stream_url(self, stream_id, ext="ts"):
         return "%s/live/%s/%s/%s.%s" % (
-            self.url, self.user, self.password, stream_id, ext)
+            self.url, urllib.parse.quote(self.user),
+            urllib.parse.quote(self.password), stream_id, ext)
 
     def movie_url(self, stream_id, ext="mp4"):
         return "%s/movie/%s/%s/%s.%s" % (
-            self.url, self.user, self.password, stream_id, ext)
+            self.url, urllib.parse.quote(self.user),
+            urllib.parse.quote(self.password), stream_id, ext)
 
     def series_url(self, episode_id, ext="mp4"):
         return "%s/series/%s/%s/%s.%s" % (
-            self.url, self.user, self.password, episode_id, ext)
+            self.url, urllib.parse.quote(self.user),
+            urllib.parse.quote(self.password), episode_id, ext)
 
 
 class XtreamApi(object):
