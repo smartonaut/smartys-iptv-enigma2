@@ -55,6 +55,7 @@ def download_trailer(url):
     path = "/tmp/trailer_%s.mp4" % key
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
+    proc = None
     try:
         cmd = ["yt-dlp", "-f",
                "bestvideo[height<=480][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=480]+bestaudio/best",
@@ -66,5 +67,12 @@ def download_trailer(url):
         if os.path.exists(path) and os.path.getsize(path) > 0:
             return path
     except Exception:
-        pass
+        # Timeout o.ä.: Prozess unbedingt abräumen, sonst läuft yt-dlp
+        # auf der Box unbegrenzt weiter.
+        if proc is not None:
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
     return None
