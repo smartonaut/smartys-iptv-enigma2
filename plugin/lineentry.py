@@ -34,7 +34,7 @@ def _skin(name, footer):
             <widget name="subtitle" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
             <eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" zPosition="2" />
             <widget name="explain" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="top" transparent="1" zPosition="2" />
-            <widget name="config" position="%d,%d" size="%d,%d" render="ConfigList" itemHeight="%d" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
+            <widget name="config" position="%d,%d" size="%d,%d" itemHeight="%d" scrollbarMode="showOnDemand" enableWrapAround="1" zPosition="2" />
             <widget name="status" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="center" valign="center" transparent="1" zPosition="2" />
             <eLabel text="%s" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" backgroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
         </screen>
@@ -51,7 +51,7 @@ def _skin(name, footer):
         theme.scale(48), theme.scale_y(176), theme.scale(1184), theme.scale_y(110),
         theme.font(18), theme.TEXT,
         theme.scale(48), theme.scale_y(300), theme.scale(1184), theme.scale_y(300),
-        theme.scale(44), theme.TEXT, theme.GOLD, theme.PANEL, theme.SELECT_BG,
+        theme.scale(44),
         theme.scale(48), theme.scale_y(620), theme.scale(1184), theme.scale_y(30),
         theme.font(16), theme.MUTED,
         footer,
@@ -69,7 +69,7 @@ class UnlockScreen(ConfigListScreen, Screen):
     """
 
     def __init__(self, session, payload=None, target=None):
-        self.skin = _skin("SmartysUnlock", "OK = Entsperren   ·   EXIT = Zurück")
+        self.skin = _skin("SmartysUnlock", "GRÜN = Entsperren   ·   EXIT = Zurück")
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()
@@ -81,8 +81,9 @@ class UnlockScreen(ConfigListScreen, Screen):
         self._entries = [
             getConfigListEntry(_("Sicherheits-Passwort"), self.pw),
         ]
-        self["config"].list = self._entries
-        self["config"].l.setList(self._entries)
+        # ConfigListScreen erzeugt self["config"] (echte ConfigList) und
+        # bindet die Einträge — KEIN eigenes .list/.l.setList nötig.
+        ConfigListScreen.__init__(self, self._entries, session=session)
 
         self["header"] = Label(_("Entsperren"))
         self["subtitle"] = Label(_("Sicherheits-Passwort"))
@@ -95,7 +96,6 @@ class UnlockScreen(ConfigListScreen, Screen):
         self["actions"] = ActionMap(
             ["OkCancelActions", "ColorActions"],
             {
-                "ok": self.unlock_now,
                 "cancel": self.close,
                 "green": self.unlock_now,
                 "red": self.close,
@@ -156,8 +156,9 @@ class LineEntryScreen(ConfigListScreen, Screen):
             getConfigListEntry(_("Sicherheits-Passwort (mind. 8 Zeichen)"), self.secpw),
             getConfigListEntry(_("Sicherheits-Passwort wiederholen"), self.secpw2),
         ]
-        self["config"].list = self._entries
-        self["config"].l.setList(self._entries)
+        # ConfigListScreen erzeugt self["config"] (echte ConfigList) und
+        # bindet die Einträge — KEIN eigenes .list/.l.setList nötig.
+        ConfigListScreen.__init__(self, self._entries, session=session)
 
         self["header"] = Label(_("Line lokal eingeben"))
         self["subtitle"] = Label(_("Verschlüsselt auf dieser Box"))
@@ -170,7 +171,6 @@ class LineEntryScreen(ConfigListScreen, Screen):
         self["actions"] = ActionMap(
             ["OkCancelActions", "ColorActions"],
             {
-                "ok": self.save_line,
                 "cancel": self.close,
                 "green": self.save_line,
                 "red": self.close,
