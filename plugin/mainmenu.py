@@ -36,6 +36,7 @@ class MainMenuScreen(Screen):
     def _refresh(self):
         paired = bool(self.cfg.providers())
         entries = [
+            (_("▶ Im Demo-Modus starten"), self.open_demo),
             (_("Live-TV"), self.open_live),
             (_("Filme (VOD)"), self.open_vod),
             (_("Serien"), self.open_series),
@@ -52,6 +53,11 @@ class MainMenuScreen(Screen):
         sel = self["list"].getCurrent()
         if sel:
             sel[1]()
+
+    def open_demo(self):
+        # Direkter Einstieg in den Demo-Modus (legale öffentliche Sender).
+        from .demo import DemoListScreen
+        self.session.open(DemoListScreen, self.cfg)
 
     def open_live(self):
         if not self.cfg.providers():
