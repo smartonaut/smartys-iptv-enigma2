@@ -177,9 +177,13 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self._show_infobar()
 
     def _load_epg(self):
-        """Lädt short_epg und setzt Titel + Laufzeit-Daten."""
+        """Lädt short_epg und setzt Titel + Laufzeit-Daten.
+
+        Backup-Kette: Provider short_epg -> freies EPG (Rytec).
+        """
         print("[SmartysIPTV] _load_epg api=%s stream_id=%s" % (
             self.api is not None, self.stream_id))
+        self._backup_tried = False
         if not self.api or not self.stream_id:
             return
         try:
@@ -194,7 +198,34 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             print("[SmartysIPTV] EPG-Fehler: %r" % e)
             self._epg_now = None
             self._epg_next = None
+        if self._epg_now is None:
+            self._try_backup_epg()
         self._apply_epg()
+
+    def _try_backup_epg(self):
+        """Freies EPG (Rytec) als Fallback, wenn der Provider nichts liefert."""
+        try:
+            from . import epgbackup
+            epgbackup.ensure_loaded()
+            if not epgbackup.ready():
+                return
+            self._backup_tried = True
+            now_ev, next_ev = epgbackup.lookup(self.stream_name or "")
+            if now_ev:
+                self._epg_now = {
+                    "title": now_ev[2],
+                    "start_timestamp": str(now_ev[0]),
+                    "stop_timestamp": str(now_ev[1]),
+                }
+                print("[SmartysIPTV] EPG-Backup now: %s" % now_ev[2])
+            if next_ev:
+                self._epg_next = {
+                    "title": next_ev[2],
+                    "start_timestamp": str(next_ev[0]),
+                    "stop_timestamp": str(next_ev[1]),
+                }
+        except Exception as e:
+            print("[SmartysIPTV] EPG-Backup-Fehler: %r" % e)
 
     def _apply_epg(self):
         """Setzt Sendername, Titel (mit Sendezeit) und Laufzeit-Balken."""
@@ -278,6 +309,19 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 self["progress"].hide()
         else:
             self["progress"].hide()
+
+        # EPG-Backup nachziehen, sobald der Lade-Thread fertig ist.
+        if (self._epg_now is None and not getattr(self, "_backup_tried", True)
+                and self.stream_id):
+            try:
+                from . import epgbackup
+                if epgbackup.ready():
+                    self._backup_tried = True
+                    self._try_backup_epg()
+                    if self._epg_now is not None:
+                        self._apply_epg()
+            except Exception:
+                pass
 
         # Logo + Auflösung nachziehen (asynchron geladen, erst nach Streamstart).
         self._load_logo()
