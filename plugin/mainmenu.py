@@ -45,7 +45,8 @@ class MainMenuScreen(Screen):
         ]
         self["list"].setList([(label, fnc) for label, fnc in entries])
         self["status"].setText(
-            _("Verbunden") if paired else _("Nicht verbunden — bitte pairen"))
+            _("Verbunden") if paired
+            else _("Demo-Modus — öffentliche Sender (ohne Line)"))
 
     def ok(self):
         sel = self["list"].getCurrent()
@@ -53,6 +54,11 @@ class MainMenuScreen(Screen):
             sel[1]()
 
     def open_live(self):
+        if not self.cfg.providers():
+            # Demo-Modus: legale öffentliche Sender, damit man ohne Line testet.
+            from .demo import DemoListScreen
+            self.session.open(DemoListScreen, self.cfg)
+            return
         from .categories import CategoryListScreen
         from .channellist import LiveListScreen
         self.session.open(
