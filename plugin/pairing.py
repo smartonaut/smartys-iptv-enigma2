@@ -8,6 +8,9 @@ Nutzer im Panel ein) und holt per 'Verbinden' die Provider-Credentials.
 from Screens.Screen import Screen
 from Components.ActionMap import ActionMap
 from Components.Label import Label
+from Components.Pixmap import Pixmap
+from Tools.LoadPixmap import LoadPixmap
+from enigma import eTimer
 
 from .config import Config
 from .api import pair_with_panel, ApiError
@@ -24,6 +27,11 @@ class PairingScreen(Screen):
                 'transparent="1" zPosition="2" />'
                 % (theme.scale(48), theme.scale_y(162), theme.scale(1184),
                    theme.scale_y(330), theme.font(19), theme.TEXT)
+                +
+                '<widget name="qr" position="%d,%d" size="%d,%d" '
+                'zPosition="3" transparent="1" alphatest="on" />'
+                % (theme.scale(48), theme.scale_y(510), theme.scale(230),
+                   theme.scale_y(230))
             ),
         )
         Screen.__init__(self, session)
@@ -40,10 +48,12 @@ class PairingScreen(Screen):
             "Player-ID:  %s\n"
             "Passwort:   %s\n"
             "\n"
-            "1. Im Browser panel.smartys.tech öffnen\n"
-            "2. Mit diesen Daten anmelden + Playlist zuweisen\n"
+            "1. QR-Code mit dem Handy scannen\n"
+            "   (oder panel.smartys.tech im Browser öffnen)\n"
+            "2. Playlist zuweisen\n"
             "3. Hier ROT (Verbinden) drücken"
         ) % (self.pid, self.pw))
+        self["qr"] = Pixmap()
         self["status"] = Label(
             _("Verbunden") if self.cfg.providers() else _("Nicht verbunden"))
 
@@ -56,6 +66,50 @@ class PairingScreen(Screen):
                 "green": self.close,
             },
         )
+        self.onLayoutFinish.append(self._load_qr)
+
+    def _load_qr(self):
+        """Lädt das QR-PNG asynchron vom Panel und zeigt es an."""
+        import threading
+        import subprocess
+        from urllib.parse import quote
+        url = "https://panel.smartys.tech/qr?mac=%s&pw=%s" % (
+            quote(self.pid), quote(self.pw))
+        path = "/tmp/smartys_qr.png"
+        # None = lädt noch, "" = Fehler, Pfad = fertig
+        self._qr_path = None
+
+        def fetch():
+            try:
+                subprocess.run(
+                    ["wget", "-q", "-O", path, url], check=True, timeout=20)
+                self._qr_path = path
+            except Exception:
+                self._qr_path = ""
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+        self._qr_poll_timer = eTimer()
+        try:
+            self._qr_poll_timer.callback.append(self._poll_qr)
+        except Exception:
+            self._qr_poll_timer.timeout.connect(self._poll_qr)
+        self._qr_poll_timer.start(400, True)
+
+    def _poll_qr(self):
+        if self._qr_path is None:
+            try:
+                self._qr_poll_timer.start(400, True)
+            except Exception:
+                pass
+            return
+        if self._qr_path:
+            try:
+                pix = LoadPixmap(self._qr_path)
+                if pix:
+                    self["qr"].instance.setPixmap(pix)
+            except Exception:
+                pass
 
     def connect(self):
         self["status"].setText(_("Verbinde mit panel.smartys.tech…"))
