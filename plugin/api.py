@@ -139,8 +139,15 @@ def pair_with_panel(player_id, pairing_pw, panel="https://panel.smartys.tech"):
     """
     Pairing-Flow (identisch zur Desktop-Version DesktopViewModel.pairAndLoad):
       1. POST /api/v1/pair   mit mac=<player_id>&password=<pairing_pw>  -> token
-      2. GET  /api/v1/providers mit Authorization: Bearer <token>      -> providers
-    Liefert eine Liste von Credentials (server_url/username/password).
+      2. GET  /api/v1/providers mit Authorization: Bearer ***      -> payload
+    Rückgabe: das Payload-Dict des Panels.
+
+    Zwei Fälle:
+      - {"encrypted": true, salt, iterations, providers: [{label, cipher_*}...]}
+        => Panel-Spieler MIT Sicherheits-Passwort. Entschlüsselung passiert
+        LOKAL mit dem Nutzer-Passwort (siehe config.store_panel_payload).
+      - {"providers": [{server_url, username, password}...]}
+        => Alt-Format (Panel-Spieler ohne Sicherheits-Passwort), Klartext.
     """
     # Schritt 1: Pair
     body = urllib.parse.urlencode({
@@ -168,10 +175,13 @@ def pair_with_panel(player_id, pairing_pw, panel="https://panel.smartys.tech"):
             data = json.loads(r.read().decode("utf-8"))
     except Exception as e:
         raise ApiError("Provider-Laden fehlgeschlagen: %s" % e)
+    return data
 
-    providers = data.get("providers") or []
+
+def providers_to_credentials(provs):
+    """Alt-Format-Provider (Klartext) in Credentials wandeln."""
     creds = []
-    for p in providers:
+    for p in provs:
         creds.append(Credentials(
             p.get("server_url", ""),
             p.get("username", ""),

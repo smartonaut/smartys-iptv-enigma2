@@ -5,11 +5,22 @@ Smartys IPTV — Konfiguration & Persistenz für Enigma2.
 Speichert Player-ID, Pairing-Passwort und Provider-Credentials in einer
 JSON-Datei unter /etc/enigma2/smartysiptv.json (Standard-Enigma2-Konfig-Pfad,
 der ein Reboot übersteht).
-"""
 
+VERSCHLÜSSELTE SPEICHERUNG (Sicherheits-Passwort-Feature):
+  - Lokale Eingabe: Line wird mit dem vom Nutzer gewählten Sicherheits-
+    Passwort AES-256-GCM-verschlüsselt (PBKDF2-HMAC-SHA256) gespeichert.
+  - Panel-Pairing: das Panel liefert die Line bereits verschlüsselt
+    (Nutzer-Schlüssel); der Ciphertext wird 1:1 lokal abgelegt.
+  - In BEIDEN Fällen liegt in smartysiptv.json nur Ciphertext. Der
+    Klartext existiert ausschließlich im RAM, nachdem der Nutzer das
+    Sicherheits-Passwort eingegeben hat (unlock()).
+  - Die Line wird dabei NIE an panel.smartys.tech übertragen (lokaler Modus).
+"""
 import os
 import json
 import secrets
+
+from . import crypto as sec
 
 CONFIG_DIR = "/etc/enigma2"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "smartysiptv.json")
@@ -23,6 +34,13 @@ DEFAULTS = {
 }
 
 _PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+
+SEC_VERIFY_PLAINTEXT = "smartys-sec-password-ok"
+
+# Sitzungs-Zustand (nur RAM): entsperrte Provider + Key. Bewusst NICHT
+# persistiert — nach Neustart muss das Sicherheits-Passwort neu eingegeben
+# werden (genau das ist der Sinn der Verschlüsselung).
+_session = {"key": None, "providers": []}
 
 
 class Config(object):
@@ -87,11 +105,149 @@ class Config(object):
         self.set("pairing_pw", pw)
         return pw
 
-    def providers(self):
-        return self.get("providers", [])  # Liste von {server_url, username, password}
+    # ====================== VERSCHLÜSSELTE PROVIDER ======================
 
-    def set_providers(self, creds):
+    def has_encrypted(self):
+        """Liegt verschlüsselter Bestand vor (Panel-Payload oder lokal)?"""
+        return bool(self.get("providers_enc"))
+
+    def has_legacy_plaintext(self):
+        """Altformat (Klartext) vorhanden? (Migration nötig, selten.)"""
+        return bool(self.get("providers"))
+
+    def is_locked(self):
+        """Verschlüsselt vorhanden UND noch nicht entsperrt?"""
+        return self.has_encrypted() and not _session["providers"]
+
+    def providers(self):
+        """Provider-Liste (Klartext) aus der Session.
+
+        Liefert [] wenn verschlüsselt + gesperrt (Aufrufer öffnet dann den
+        Entsperren-Screen). Altformat-Klartext wird als Bestand zurückgegeben
+        (funktioniert weiter, bis der Nutzer neu sichert)."""
+        if _session["providers"]:
+            return list(_session["providers"])
+        if self.has_encrypted():
+            return []
+        legacy = self.get("providers", []) or []
+        return [{"server_url": p.get("server_url", ""),
+                 "username": p.get("username", ""),
+                 "password": p.get("password", ""),
+                 "label": p.get("label", "")} for p in legacy]
+
+    def unlock(self, password):
+        """Entsperrt mit dem Sicherheits-Passwort. Füllt die RAM-Session.
+
+        Rückgabe: True bei Erfolg, False bei falschem Passwort."""
+        if not self.has_encrypted():
+            return True  # nichts zu entsperren
+        if not sec.crypto_available():
+            return False
+        salt = self.get("sec_salt", "")
+        key = sec.derive_key(password, salt)
+        # Verify-Token prüfen (falsches Passwort => GCM-Auth-Fehler => "")
+        verify = self.get("sec_verify", "")
+        if sec.decrypt_text(key, verify, self.player_id()) != SEC_VERIFY_PLAINTEXT:
+            return False
+        provs = []
+        for enc in (self.get("providers_enc") or []):
+            d = sec.decrypt_provider(key, enc.get("cipher", ""), self.player_id())
+            if d:
+                d.setdefault("label", enc.get("label", ""))
+                provs.append(d)
+        if not provs:
+            return False
+        _session["key"] = key
+        _session["providers"] = provs
+        return True
+
+    def _encrypt_and_store(self, provs, user_password, salt=None):
+        """Verschlüsselt Provider-Liste mit Nutzer-Passwort und speichert."""
+        salt = salt or sec.new_salt()
+        key = sec.derive_key(user_password, salt)
+        pid = self.player_id()
+        enc_list = []
+        for p in provs:
+            payload = {"server_url": p.get("server_url", ""),
+                       "username": p.get("username", ""),
+                       "password": p.get("password", ""),
+                       "epg_url": p.get("epg_url", "")}
+            enc_list.append({
+                "label": p.get("label", "") or "Meine Line",
+                "cipher": sec.encrypt_provider(key, payload, pid),
+            })
+        self.set("sec_salt", salt)
+        self.set("sec_verify", sec.encrypt_text(key, SEC_VERIFY_PLAINTEXT, pid))
+        self.set("providers_enc", enc_list)
+        # Altformat-Klartext NICHT behalten (nur Ciphertext auf der Platte).
+        if "providers" in self._data:
+            self._data.pop("providers", None)
+            self.save()
+        _session["key"] = key
+        _session["providers"] = [
+            {"server_url": p["server_url"], "username": p["username"],
+             "password": p["password"], "epg_url": p.get("epg_url", ""),
+             "label": p.get("label", "") or "Meine Line"}
+            for p in provs
+        ]
+
+    def store_local_line(self, server_url, username, password, user_password,
+                         epg_url="", label="Lokale Line"):
+        """LOKALE Eingabe: Line verschlüsselt auf der Box speichern.
+        Es wird NICHTS an das Panel gesendet."""
+        provs = [{"server_url": server_url.strip(),
+                  "username": username.strip(),
+                  "password": password,
+                  "epg_url": epg_url.strip(),
+                  "label": label}]
+        self._encrypt_and_store(provs, user_password)
+
+    def store_panel_payload(self, payload, user_password):
+        """Panel-Pairing (verschlüsseltes Payload): Ciphertext 1:1 ablegen,
+        Salt vom Panel übernehmen, lokal entsperren."""
+        salt = payload.get("salt", "")
+        if not salt:
+            return False
+        provs = payload.get("providers", []) or []
+        if not provs:
+            return False
+        key = sec.derive_key(user_password, salt)
+        pid = self.player_id()
+        enc_list = []
+        plain_list = []
+        for p in provs:
+            d = {
+                "server_url": sec.decrypt_text(key, p.get("cipher_server_url", ""), pid),
+                "username": sec.decrypt_text(key, p.get("cipher_username", ""), pid),
+                "password": sec.decrypt_text(key, p.get("cipher_password", ""), pid),
+                "epg_url": sec.decrypt_text(key, p.get("cipher_epg_url", ""), pid),
+            }
+            if not (d["server_url"] and d["username"]):
+                return False  # falsches Passwort
+            payload_json = {"server_url": d["server_url"], "username": d["username"],
+                            "password": d["password"], "epg_url": d["epg_url"]}
+            enc_list.append({"label": p.get("label", "") or "Meine Line",
+                             "cipher": sec.encrypt_text(key, json.dumps(payload_json), pid)})
+            plain_list.append(dict(d, label=p.get("label", "") or "Meine Line"))
+        self.set("sec_salt", salt)
+        self.set("sec_verify", sec.encrypt_text(key, SEC_VERIFY_PLAINTEXT, pid))
+        self.set("providers_enc", enc_list)
+        if "providers" in self._data:
+            self._data.pop("providers", None)
+            self.save()
+        _session["key"] = key
+        _session["providers"] = plain_list
+        return True
+
+    def set_providers_legacy(self, creds):
+        """Alt-Pfad (Panel OHNE Sicherheits-Passwort): Klartext wie bisher."""
         self.set("providers", [
-            {"server_url": c.url, "username": c.user, "password": c.password}
+            {"server_url": c.url, "username": c.user, "password": c.password,
+             "label": ""}
             for c in creds
         ])
+        _session["providers"] = [
+            {"server_url": c.url, "username": c.user, "password": c.password,
+             "label": ""}
+            for c in creds
+        ]

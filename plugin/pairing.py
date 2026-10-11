@@ -13,7 +13,7 @@ from Tools.LoadPixmap import LoadPixmap
 from enigma import eTimer
 
 from .config import Config
-from .api import pair_with_panel, ApiError
+from .api import pair_with_panel, providers_to_credentials, ApiError
 from . import theme
 
 
@@ -114,14 +114,28 @@ class PairingScreen(Screen):
     def connect(self):
         self["status"].setText(_("Verbinde mit panel.smartys.tech…"))
         try:
-            creds = pair_with_panel(self.pid, self.pw)
+            payload = pair_with_panel(self.pid, self.pw)
         except ApiError as e:
             self["status"].setText(str(e))
             return
 
+        if payload.get("encrypted"):
+            # Panel-Spieler MIT Sicherheits-Passwort: Line kommt verschlüsselt.
+            # Entschlüsselung passiert LOKAL — Nutzer-Passwort abfragen.
+            if not payload.get("providers"):
+                self["status"].setText(_("Keine Playlist zugewiesen"))
+                return
+            self["status"].setText(_(
+                "Line verschlüsselt empfangen — Sicherheits-Passwort eingeben"))
+            from .lineentry import UnlockScreen
+            self.session.open(UnlockScreen, payload=payload)
+            return
+
+        # Alt-Format: Panel ohne Sicherheits-Passwort (Klartext, wie bisher).
+        creds = providers_to_credentials(payload.get("providers") or [])
         if not creds:
             self["status"].setText(_("Keine Playlist zugewiesen"))
             return
 
-        self.cfg.set_providers(creds)
+        self.cfg.set_providers_legacy(creds)
         self["status"].setText(_("OK — %d Provider geladen") % len(creds))

@@ -5,4 +5,4 @@ Section: extensions
 Priority: optional
 Maintainer: Smartys
 Architecture: all
-Depends: enigma2, ffmpeg
+Depends: enigma2, ffmpeg, python3-cryptography
