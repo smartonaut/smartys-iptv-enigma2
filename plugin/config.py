@@ -259,4 +259,9 @@ class Config(object):
         self.save()
         _session["key"] = None
         _session["providers"] = []
+        # EPG-Cache der alten Sender ebenfalls entfernen (epgbackup.CACHE_FILE).
+        try:
+            os.remove("/etc/enigma2/smartysiptv_epg.json")
+        except OSError:
+            pass
         return True
