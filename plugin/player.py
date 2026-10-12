@@ -15,6 +15,7 @@ Zwei Modi (beide über playService):
 from enigma import eServiceReference
 
 SERVICE_GSTREAMER = 4097
+SERVICE_GSTPLAYER = 5001
 SERVICE_EXTPLAYER3 = 5002
 
 
