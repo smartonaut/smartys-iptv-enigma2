@@ -52,7 +52,9 @@ class PairingScreen(Screen):
             "1. QR-Code mit dem Handy scannen\n"
             "   (oder panel.smartys.tech im Browser öffnen)\n"
             "2. Playlist zuweisen\n"
-            "3. Hier ROT (Verbinden) drücken"
+            "3. Hier ROT (Verbinden) drücken\n"
+            "\n"
+            "GELB = Pairing löschen    GRÜN = Schließen"
         ) % (self.pid, self.pw))
         self["qr"] = Pixmap()
         self["status"] = Label(
@@ -158,17 +160,19 @@ class PairingScreen(Screen):
             self.cfg.reset()
             self.pid = self.cfg.player_id()
             self.pw = self.cfg.pairing_pw()
-            self["details"].setText(_(
-                "Player-ID:  %s\n"
-                "Passwort:   %s\n"
-                "\n"
-                "1. QR-Code mit dem Handy scannen\n"
-                "   (oder panel.smartys.tech im Browser öffnen)\n"
-                "2. Playlist zuweisen\n"
-                "3. Hier ROT (Verbinden) drücken"
-            ) % (self.pid, self.pw))
-            self["status"].setText(_("Pairing gelöscht — neu registrieren"))
-            self._load_qr()
+
+            def _restart(answer):
+                from enigma import quitMainloop
+                quitMainloop(3)
+
+            self.session.openWithCallback(
+                _restart,
+                MessageBox,
+                _("Pairing gelöscht.\n\n"
+                  "Line + Pairing sind entfernt.\n"
+                  "Enigma2 wird jetzt neu gestartet."),
+                MessageBox.TYPE_INFO,
+            )
 
         self.session.openWithCallback(
             _do_delete,
