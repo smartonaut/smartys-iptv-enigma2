@@ -56,15 +56,36 @@ class Credentials(object):
             self.url, urllib.parse.quote(self.user),
             urllib.parse.quote(self.password), stream_id, ext)
 
+    def _resolve_redirect(self, url):
+        """Folgt einem 302-Redirect (Hoster) und liefert die finale URL.
+
+        Viele VOD/Serien liegen nicht direkt auf dem Xtream-Server, sondern
+        werden per 302 auf einen externen Hoster umgeleitet. Der Player folgt
+        dem Redirect nicht — deshalb hier auflösen (nur 1 Byte via Range).
+        """
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": USER_AGENT, "Range": "bytes=0-0"})
+            with urllib.request.urlopen(
+                    req, timeout=10, context=_SSL_CTX) as r:
+                final = r.geturl()
+                if final and final != url:
+                    return final
+        except Exception:
+            pass
+        return url
+
     def movie_url(self, stream_id, ext="mp4"):
-        return "%s/movie/%s/%s/%s.%s" % (
+        url = "%s/movie/%s/%s/%s.%s" % (
             self.url, urllib.parse.quote(self.user),
             urllib.parse.quote(self.password), stream_id, ext)
+        return self._resolve_redirect(url)
 
     def series_url(self, episode_id, ext="mp4"):
-        return "%s/series/%s/%s/%s.%s" % (
+        url = "%s/series/%s/%s/%s.%s" % (
             self.url, urllib.parse.quote(self.user),
             urllib.parse.quote(self.password), episode_id, ext)
+        return self._resolve_redirect(url)
 
 
 class XtreamApi(object):
