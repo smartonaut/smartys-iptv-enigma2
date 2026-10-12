@@ -189,14 +189,14 @@ class UnlockScreen(ConfigListScreen, Screen):
         self.close()
 
     def _load_unlock_qr(self):
-        """Lädt den QR (Handy-Scan-URL) vom Panel und zeigt ihn an."""
+        """Erzeugt den QR (Handy-Scan-URL) lokal und zeigt ihn an."""
         if not self._web_url:
             return
         qr_path = "/tmp/smartys_unlock_qr.png"
         try:
-            qr_url = ("https://panel.smartys.tech/qrdata?url="
-                      + urllib.parse.quote(self._web_url, safe=""))
-            urllib.request.urlretrieve(qr_url, qr_path)
+            from . import qr as qrgen
+            if not qrgen.make_png(self._web_url, qr_path):
+                return
             pix = LoadPixmap(qr_path)
             if pix:
                 self["qr"].instance.setPixmap(pix)

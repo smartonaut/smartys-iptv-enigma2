@@ -194,9 +194,10 @@ class SearchScreen(Screen):
             self["qr"].hide()
             return
         try:
-            qr_url = ("https://panel.smartys.tech/qrdata?url="
-                      + urllib.parse.quote(self._web_url, safe=""))
-            urllib.request.urlretrieve(qr_url, qr_path)
+            from . import qr as qrgen
+            if not qrgen.make_png(self._web_url, qr_path):
+                self["qr"].hide()
+                return
             pix = LoadPixmap(qr_path)
             if pix is not None:
                 self["qr"].instance.setPixmap(pix)
