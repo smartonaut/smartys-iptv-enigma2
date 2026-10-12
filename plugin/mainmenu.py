@@ -41,6 +41,7 @@ class MainMenuScreen(Screen):
             (_("Live-TV"), self.open_live),
             (_("Filme (VOD)"), self.open_vod),
             (_("Serien"), self.open_series),
+            (_("🔎 Suche"), self.open_search),
             (_("Timer-Aufnahmen"), self.open_timers),
             (_("Einstellungen"), self.open_prefs),
             (_("Line lokal eingeben"), self.open_line_entry),
@@ -104,6 +105,12 @@ class MainMenuScreen(Screen):
         self.session.open(
             CategoryListScreen, self.cfg, "series_categories",
             SeriesListScreen, "Serien", "Staffeln & Episoden")
+
+    def open_search(self):
+        if self._unlock_or("search"):
+            return
+        from .search import SearchScreen
+        self.session.open(SearchScreen, self.cfg)
 
     def open_timers(self):
         from .timerlist import TimerListScreen
