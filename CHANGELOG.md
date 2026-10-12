@@ -41,6 +41,28 @@ Download: `https://player.smartys.tech/download/enigma2`
 
 ---
 
+## [0.3.0] — 2026-10-12 (Beta)
+
+Download: `https://player.smartys.tech/download/enigma2`
+
+### Neu
+
+- **Handy-Passworteingabe**: QR-Code im Entsperren-Screen scannen → Passwort
+  übers Handy (gleiches WLAN) eingeben statt Fernbedienung. Lokaler Web-Server
+  (Python-Stdlib, Port 8080) läuft nur, solange der Screen offen ist.
+- **Pairing löschen (GELB-Taste)**: löscht Line + Pairing + Panel-Eintrag +
+  EPG-Cache komplett (mit Warnung). Panel-Route `/api/v1/player/delete`.
+- **Entsperren-Fix**: grüne Taste im Passwort-Feld übernimmt das Passwort und
+  entsperrt automatisch (kein doppelter Tastendruck mehr).
+- QR-Code im Pairing-Screen skaliert korrekt auf alle OSD-Auflösungen.
+
+### Technik
+
+- Generische QR-Route `/qrdata` im Panel (die Box hat kein QR-Modul).
+- `unlock_web.py`: lokaler Web-Server (nur `http.server` + `threading`).
+
+---
+
 ## [Unreleased]
 
 - exteplayer3 als eigenständiges Binary für ARM/MIPS (Cross-Compile) — bis dahin
