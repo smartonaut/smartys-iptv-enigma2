@@ -32,12 +32,21 @@ def Plugins(**kwargs):
     import os
     icon_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "images", "logo.png")
+    # Einstellung "Im Hauptmenü anzeigen": direkt im Hauptmenü (WHERE_MENU)
+    # statt unter Erweiterungen/Plugins (WHERE_PLUGINMENU).
+    try:
+        from .config import Config
+        _show_in_menu = bool(Config().load().get("show_in_main_menu", False))
+    except Exception:
+        _show_in_menu = False
+    _menu_where = (PluginDescriptor.WHERE_MENU if _show_in_menu
+                   else PluginDescriptor.WHERE_PLUGINMENU)
     return [
-        # Plugin-Menü (Hauptmenü -> Erweiterungen/Plugins)
+        # Plugin-Menü (Hauptmenü, direkt oder unter Erweiterungen/Plugins)
         PluginDescriptor(
             name="Smartys IPTV",
             description="IPTV-Player für Smartys (Live-TV, Filme, Serien)",
-            where=PluginDescriptor.WHERE_PLUGINMENU,
+            where=_menu_where,
             icon=icon_file,
             fnc=main,
         ),

@@ -31,6 +31,7 @@ DEFAULTS = {
     "timeshift": True,
     "confirm_switch": True,
     "preview": True,
+    "show_in_main_menu": False,
 }
 
 _PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"

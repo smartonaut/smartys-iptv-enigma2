@@ -15,6 +15,7 @@ OPTIONS = [
     ("timeshift", "Timeshift (Pause = automatische Aufnahme)"),
     ("confirm_switch", "Umschalt-Schutz (Abfrage bei laufender Aufnahme)"),
     ("preview", "Vorschau (PIP) in der Senderliste"),
+    ("show_in_main_menu", "Im Hauptmenü anzeigen (wie XStreamity)"),
 ]
 
 
