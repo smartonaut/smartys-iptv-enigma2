@@ -78,6 +78,8 @@ class UnlockScreen(ConfigListScreen, Screen):
         self.skiptarget = False
 
         self.pw = ConfigPassword(default="", fixed_size=False)
+        self._unlock_running = False
+        self.pw.addNotifier(self._on_pw_change, initial_call=False)
         self._entries = [
             getConfigListEntry(_("Sicherheits-Passwort"), self.pw),
         ]
@@ -102,14 +104,23 @@ class UnlockScreen(ConfigListScreen, Screen):
             },
         )
 
+    def _on_pw_change(self, element):
+        if element.value and not self._unlock_running:
+            self.unlock_now()
+
     def unlock_now(self):
+        if self._unlock_running:
+            return
+        self._unlock_running = True
         if not sec.crypto_available():
             self["status"].setText(_(
                 "python3-cryptography fehlt — bitte per opkg installieren"))
+            self._unlock_running = False
             return
         pw = self.pw.value or ""
         if not pw:
             self["status"].setText(_("Bitte Passwort eingeben"))
+            self._unlock_running = False
             return
         # PBKDF2 auf schwachen Boxen: kurz blockieren, aber sichtbar melden.
         self["status"].setText(_("Prüfe Passwort…"))
@@ -122,6 +133,7 @@ class UnlockScreen(ConfigListScreen, Screen):
             ok = False
         if not ok:
             self["status"].setText(_("Passwort falsch — Line bleibt verschlüsselt"))
+            self._unlock_running = False
             return
         self["status"].setText(_("Entsperrt ✓"))
         if self.target and not self.skiptarget:
