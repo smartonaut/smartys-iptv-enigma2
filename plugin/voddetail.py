@@ -184,7 +184,8 @@ class VodDetailScreen(Screen):
     def play(self):
         ext = "mp4"
         url = self.api.creds.movie_url(self.stream_id, ext)
-        vlc_player.open_player(self.session, url, name=self.name)
+        vlc_player.open_player(self.session, url, name=self.name,
+                               servicetype=vlc_player.SERVICE_EXTPLAYER3)
 
     def trailer(self):
         if not self._trailer:
