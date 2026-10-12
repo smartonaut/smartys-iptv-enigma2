@@ -29,9 +29,9 @@ class PairingScreen(Screen):
                    theme.scale_y(330), theme.font(19), theme.TEXT)
                 +
                 '<widget name="qr" position="%d,%d" size="%d,%d" '
-                'zPosition="3" transparent="1" alphatest="on" />'
-                % (theme.scale(48), theme.scale_y(510), theme.scale(230),
-                   theme.scale_y(230))
+                'scale="1" zPosition="3" transparent="1" alphatest="blend" />'
+                % (theme.scale(48), theme.scale_y(488), theme.scale(200),
+                   theme.scale_y(200))
             ),
         )
         Screen.__init__(self, session)
