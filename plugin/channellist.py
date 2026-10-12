@@ -18,7 +18,7 @@ from . import picon
 
 def _b64(s):
     try:
-        return base64.b64decode(s).decode("utf-8", "replace")
+        return base64.b64decode(s, validate=True).decode("utf-8", "replace")
     except Exception:
         return s or ""
 
