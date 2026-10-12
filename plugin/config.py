@@ -117,24 +117,25 @@ class Config(object):
         return bool(self.get("providers"))
 
     def is_locked(self):
-        """Verschlüsselt vorhanden UND noch nicht entsperrt?"""
-        return self.has_encrypted() and not _session["providers"]
+        """Verschlüsselt vorhanden UND noch nicht entsperrt (kein Klartext abgelegt)?"""
+        return (self.has_encrypted() and not _session["providers"]
+                and not self.get("providers"))
 
     def providers(self):
-        """Provider-Liste (Klartext) aus der Session.
+        """Provider-Liste (Klartext).
 
-        Liefert [] wenn verschlüsselt + gesperrt (Aufrufer öffnet dann den
-        Entsperren-Screen). Altformat-Klartext wird als Bestand zurückgegeben
-        (funktioniert weiter, bis der Nutzer neu sichert)."""
+        Reihenfolge: RAM-Session (gerade entsperrt) → lokal abgelegter
+        Klartext (einmaliges Entsperren, danach kein Passwort nötig) →
+        [] wenn verschlüsselt + gesperrt."""
         if _session["providers"]:
             return list(_session["providers"])
-        if self.has_encrypted():
-            return []
         legacy = self.get("providers", []) or []
-        return [{"server_url": p.get("server_url", ""),
-                 "username": p.get("username", ""),
-                 "password": p.get("password", ""),
-                 "label": p.get("label", "")} for p in legacy]
+        if legacy:
+            return [{"server_url": p.get("server_url", ""),
+                     "username": p.get("username", ""),
+                     "password": p.get("password", ""),
+                     "label": p.get("label", "")} for p in legacy]
+        return []
 
     def unlock(self, password):
         """Entsperrt mit dem Sicherheits-Passwort. Füllt die RAM-Session.
@@ -160,6 +161,9 @@ class Config(object):
             return False
         _session["key"] = key
         _session["providers"] = provs
+        # Klartext lokal ablegen (einmaliges Entsperren, danach kein Passwort
+        # mehr — gleiche Entscheidung wie beim Desktop-Player).
+        self.set("providers", provs)
         return True
 
     def _encrypt_and_store(self, provs, user_password, salt=None):
