@@ -13,7 +13,8 @@ from Tools.LoadPixmap import LoadPixmap
 from enigma import eTimer
 
 from .config import Config
-from .api import pair_with_panel, providers_to_credentials, ApiError
+from .api import (pair_with_panel, providers_to_credentials, ApiError,
+                  delete_player_remote)
 from . import theme
 
 
@@ -64,6 +65,7 @@ class PairingScreen(Screen):
                 "cancel": self.close,
                 "red": self.connect,
                 "green": self.close,
+                "yellow": self.delete_pairing,
             },
         )
         self.onLayoutFinish.append(self._load_qr)
@@ -139,3 +141,40 @@ class PairingScreen(Screen):
 
         self.cfg.set_providers_legacy(creds)
         self["status"].setText(_("OK — %d Provider geladen") % len(creds))
+
+    def delete_pairing(self):
+        """GELB: Pairing + Line komplett löschen (mit Warnung)."""
+        from Screens.MessageBox import MessageBox
+
+        def _do_delete(answer):
+            if answer is not True:
+                return
+            self["status"].setText(_("Lösche Pairing…"))
+            try:
+                delete_player_remote(self.pid, self.pw)
+            except ApiError as e:
+                self["status"].setText(str(e))
+                return
+            self.cfg.reset()
+            self.pid = self.cfg.player_id()
+            self.pw = self.cfg.pairing_pw()
+            self["details"].setText(_(
+                "Player-ID:  %s\n"
+                "Passwort:   %s\n"
+                "\n"
+                "1. QR-Code mit dem Handy scannen\n"
+                "   (oder panel.smartys.tech im Browser öffnen)\n"
+                "2. Playlist zuweisen\n"
+                "3. Hier ROT (Verbinden) drücken"
+            ) % (self.pid, self.pw))
+            self["status"].setText(_("Pairing gelöscht — neu registrieren"))
+            self._load_qr()
+
+        self.session.openWithCallback(
+            _do_delete,
+            MessageBox,
+            _("Pairing wirklich löschen?\n\n"
+              "Das löscht deine Line und das Pairing mit dem Webpanel.\n"
+              "Du musst dich danach neu registrieren."),
+            MessageBox.TYPE_YESNO,
+        )

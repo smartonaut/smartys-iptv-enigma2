@@ -251,3 +251,12 @@ class Config(object):
              "label": ""}
             for c in creds
         ]
+
+    def reset(self):
+        """Kompletter Neuinstall: Player-ID, Pairing-PW, Lines + Session weg.
+        Beim naechsten Zugriff werden frische Werte generiert."""
+        self._data = {}
+        self.save()
+        _session["key"] = None
+        _session["providers"] = []
+        return True

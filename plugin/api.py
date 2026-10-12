@@ -178,6 +178,34 @@ def pair_with_panel(player_id, pairing_pw, panel="https://panel.smartys.tech"):
     return data
 
 
+def delete_player_remote(player_id, pairing_pw, panel="https://panel.smartys.tech"):
+    """'Pairing loeschen': entfernt den Player komplett aus dem Panel.
+
+    Auth ueber MAC + Pairing-Passwort. Wirft ApiError bei Fehlschlag.
+    404 (Player im Panel schon weg) gilt als Erfolg — lokal wird trotzdem
+    zurueckgesetzt."""
+    body = urllib.parse.urlencode({
+        "mac": player_id,
+        "password": pairing_pw,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        panel + "/api/v1/player/delete", data=body, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded",
+                 "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=10, context=_PANEL_SSL_CTX) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"ok": True, "already_gone": True}
+        raise ApiError("Löschen fehlgeschlagen: HTTP %s" % e.code)
+    except Exception as e:
+        raise ApiError("Löschen fehlgeschlagen: %s" % e)
+    if not data.get("ok"):
+        raise ApiError("Löschen fehlgeschlagen")
+    return data
+
+
 def providers_to_credentials(provs):
     """Alt-Format-Provider (Klartext) in Credentials wandeln."""
     creds = []
