@@ -124,7 +124,7 @@ class UnlockScreen(ConfigListScreen, Screen):
         try:
             port = unlock_web.start(self._web_receive)
             self._web_url = "http://%s:%d" % (unlock_web.lan_ip(), port)
-            self._load_unlock_qr()
+            self.onLayoutFinish.append(self._load_unlock_qr)
         except Exception:
             self._web_url = None
         self.onClose.append(self._web_close)
