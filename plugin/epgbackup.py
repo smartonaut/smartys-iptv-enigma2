@@ -182,6 +182,29 @@ def ready():
     return _ready
 
 
+def _finde(channel_name):
+    """Passende Eintraege im Index finden — in drei Stufen.
+
+    Die Namen passen selten zeichengenau: "DE - Das Erste HD" wird zu
+    "das erste", im Cache steht aber nur "erste". "DE - SAT.1 HD" wird zu
+    "sat 1", im Cache "sat1". Stufe 1 exakt, Stufe 2 ohne Leerzeichen,
+    Stufe 3 Teilstring (nur ab 4 Zeichen, sonst passt "rtl" auf "rtlup").
+    """
+    key = normalize(channel_name)
+    if not key:
+        return None
+    if key in _index:
+        return _index[key]
+    kompakt = key.replace(" ", "")
+    for k, v in _index.items():
+        if k.replace(" ", "") == kompakt:
+            return v
+    for k, v in _index.items():
+        if len(k) >= 4 and (k in key or key in k):
+            return v
+    return None
+
+
 def zeitraum():
     """Erster und letzter Zeitstempel im Cache (oder (None, None))."""
     if not _ready or not _index:
@@ -205,7 +228,7 @@ def alle_sendungen(channel_name, ab_ts=None, stunden=12):
     """
     if not _ready or not channel_name:
         return []
-    events = _index.get(normalize(channel_name))
+    events = _finde(channel_name)
     if not events:
         return []
     if ab_ts is None:
@@ -229,8 +252,7 @@ def lookup(channel_name):
     """
     if not _ready or not channel_name:
         return None, None
-    key = normalize(channel_name)
-    events = _index.get(key)
+    events = _finde(channel_name)
     if not events:
         return None, None
     now = time.time()
