@@ -13,13 +13,36 @@ from Plugins.Plugin import PluginDescriptor
 from Components.PluginComponent import plugins  # noqa: F401
 
 
-def main(session, **kwargs):
+# Die Session wird beim Sessionstart gemerkt. Ein WHERE_MENU-Eintrag wird
+# naemlich OHNE Session aufgerufen (nur mit einem menuid-String) — wer dort
+# blind session.open() aufruft, crasht mit "str object has no attribute open".
+_session = None
+
+
+def _session_holen(args, kwargs):
+    """Findet die Session in beliebiger Aufrufsignatur."""
+    s = kwargs.get("session")
+    if s is not None and hasattr(s, "open"):
+        return s
+    for a in args:
+        if hasattr(a, "open") and hasattr(a, "nav"):
+            return a
+    return _session
+
+
+def main(*args, **kwargs):
     from .mainmenu import MainMenuScreen
+    session = _session_holen(args, kwargs)
+    if session is None:
+        return
     session.open(MainMenuScreen)
 
 
-def sessionstart(reason, session=None, **kwargs):
-    """Beim Start den Timer-Scheduler initialisieren (persistierte Timer laden)."""
+def sessionstart(reason=0, session=None, **kwargs):
+    """Beim Start die Session merken und den Timer-Scheduler initialisieren."""
+    global _session
+    if session is not None:
+        _session = session
     if reason == 0:
         try:
             from . import recorder
@@ -58,10 +81,12 @@ def Plugins(**kwargs):
             icon=icon_file,
             fnc=main,
         ),
-        # Autostart: Timer-Scheduler beim Start initialisieren
+        # Autostart + Sessionstart: Timer-Scheduler initialisieren und die
+        # Session merken (WHERE_MENU bekommt keine eigene Session).
         PluginDescriptor(
             name="Smartys IPTV (Autostart)",
-            where=[PluginDescriptor.WHERE_AUTOSTART],
+            where=[PluginDescriptor.WHERE_AUTOSTART,
+                   PluginDescriptor.WHERE_SESSIONSTART],
             fnc=sessionstart,
         ),
     ]
