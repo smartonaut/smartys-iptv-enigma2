@@ -54,6 +54,9 @@ class EpgOverviewScreen(Screen):
 
     tasten = [
         (theme.TASTE_OK, "OK", "Timer setzen"),
+        (theme.TASTE_GRUEN, "GRÜN", "Tag vor"),
+        (theme.TASTE_GELB, "GELB", "Tag zurück"),
+        (theme.TASTE_BLAU, "BLAU", "Wiederholen"),
         (theme.TASTE_ROT, "ROT", "Neu laden"),
         (None, "EXIT", "Zurück"),
     ]
@@ -72,6 +75,9 @@ class EpgOverviewScreen(Screen):
         self["list"] = MenuList([])
         self["status"] = Label(_("Lade Sender …"))
 
+        # Tagesversatz: 0 = heute, 1 = morgen … Der EPG-Cache reicht
+        # mehrere Tage voraus, deshalb laesst sich hier durchblaettern.
+        self._tag = 0
         self._eintraege = []
         self._fertig = 0
         self._gesamt = 0
@@ -84,6 +90,9 @@ class EpgOverviewScreen(Screen):
                 "ok": self._timer_setzen,
                 "cancel": self.close,
                 "red": self._load,
+                "green": self._tag_vor,
+                "yellow": self._tag_zurueck,
+                "blue": self._wiederholen,
             },
         )
         # Der Laden laeuft im Hintergrund; der Timer schiebt die Liste nach,
@@ -103,8 +112,90 @@ class EpgOverviewScreen(Screen):
         except Exception:
             pass
 
+    def _fenster(self):
+        """Zeitfenster des angezeigten Tages als (von, bis) in Unix-Zeit."""
+        heute = time.localtime()
+        mitternacht = time.mktime((
+            heute.tm_year, heute.tm_mon, heute.tm_mday, 0, 0, 0,
+            heute.tm_wday, heute.tm_yday, -1))
+        ab = int(mitternacht) + self._tag * 86400
+        # Ueber den Tag hinaus: was nach 23:59 laeuft, soll noch sichtbar
+        # sein — sonst fehlen Sendungen, die ueber Mitternacht gehen.
+        return ab, ab + 86400 + 4 * 3600
+
+    def _tag_vor(self):
+        """GRÜN: einen Tag weiter — hoechstens bis zum Ende des EPG.
+
+        Wie weit das reicht, haengt von der Quelle ab (der Rytec-Cache
+        liefert etwa eine Woche). Ueber das Ende hinaus waere die Liste
+        leer, ohne dass klar ist warum.
+        """
+        grenze = self._letzter_tag()
+        if self._tag >= grenze:
+            self["status"].setText(
+                _("Weiter reicht das EPG nicht (%s)") % self._datum_text())
+            return
+        self._tag += 1
+        self._load()
+
+    def _letzter_tag(self):
+        """Index des letzten Tages, fuer den es noch Daten gibt."""
+        try:
+            from . import epgbackup
+            _ab, ende = epgbackup.zeitraum()
+            if not ende:
+                return self._tag
+            heute = time.localtime()
+            mitternacht = time.mktime((
+                heute.tm_year, heute.tm_mon, heute.tm_mday, 0, 0, 0,
+                heute.tm_wday, heute.tm_yday, -1))
+            return max(0, int((ende - mitternacht) // 86400))
+        except Exception:
+            return self._tag
+
+    def _tag_zurueck(self):
+        """GELB: einen Tag zurueck (nicht vor heute)."""
+        if self._tag > 0:
+            self._tag -= 1
+        self._load()
+
+    def _datum_text(self):
+        if self._tag == 0:
+            return "Heute"
+        if self._tag == 1:
+            return "Morgen"
+        ab, _bis = self._fenster()
+        return time.strftime("%A, %d.%m.", time.localtime(ab))
+
+    def _aus_cache(self, sender):
+        """Sendungen eines Senders aus dem EPG-Cache (ohne Netzwerk).
+
+        Der Cache wird beim Plugin-Start gefuellt (epgbackup) und deckt die
+        gaengigen Sender ab. Was dort steht, ist sofort da — das Netz braucht
+        es nur fuer Sender, die der Cache nicht kennt.
+        """
+        try:
+            from . import epgbackup
+            epgbackup.ensure_loaded()
+            ab, bis = self._fenster()
+            treffer = epgbackup.alle_sendungen(sender.get("name", ""),
+                                              ab_ts=ab,
+                                              stunden=(bis - ab) / 3600.0)
+        except Exception:
+            return []
+        zeilen = []
+        for start, ende, titel in treffer:
+            zeilen.append({
+                "sender": sender.get("name", "?"),
+                "stream_id": sender.get("stream_id"),
+                "titel": titel,
+                "start": int(start),
+                "ende": int(ende),
+            })
+        return zeilen
+
     def _load(self):
-        """Sender holen und EPG-Abfragen anwerfen (nicht blockierend)."""
+        """Erst den Cache auswerten, dann nur den Rest live nachladen."""
         self["list"].setList([])
         self["status"].setText(_("Lade Sender …"))
         self._eintraege = []
@@ -143,14 +234,31 @@ class EpgOverviewScreen(Screen):
         rest = [s for s in echte if str(s.get("stream_id")) not in favs]
         auswahl = (favoriten + rest)[:self.MAX_SENDER]
 
+        # Zuerst der Cache — deckt die gaengigen Sender sofort ab.
+        offen = []
+        for s in auswahl:
+            zeilen = self._aus_cache(s)
+            if zeilen:
+                self._ergebnisse[s.get("stream_id")] = zeilen
+                self._fertig += 1
+            else:
+                offen.append(s)
         self._gesamt = len(auswahl)
-        self["status"].setText(_("Lade EPG für %d Sender …") % self._gesamt)
 
-        # Ein einzelner Arbeiter-Thread fragt der Reihe nach ab. Nebenlaeufig
-        # waere schneller, aber der Server drosselt und liefert dann Fehler.
-        threading.Thread(target=self._hole_alle, args=(auswahl,),
-                         daemon=True).start()
-        self._poll.start(700, False)
+        if offen:
+            self["status"].setText(
+                _("%d Sender aus dem Cache, lade %d nach …")
+                % (self._fertig, len(offen)))
+            # Nur der Rest geht ins Netz — einzeln, weil der Server bei
+            # parallelen Anfragen in Timeouts laeuft.
+            threading.Thread(target=self._hole_alle, args=(offen,),
+                             daemon=True).start()
+        else:
+            self["status"].setText(
+                _("%d Sender aus dem Cache") % self._gesamt)
+
+        # Liste sofort zeigen, dann weiter nachziehen
+        self._nachziehen()
 
     def _hole_alle(self, sender):
         """Alle Sender nacheinander abfragen (ein Thread, mit Pausen)."""
@@ -217,9 +325,9 @@ class EpgOverviewScreen(Screen):
             self._poll.start(700, False)
             return
 
-        # Nur Sendungen, die noch nicht vorbei sind
-        jetzt = int(time.time())
-        alle = [z for z in alle if z["ende"] > jetzt]
+        # Auf den gewaehlten Tag begrenzen
+        ab, bis = self._fenster()
+        alle = [z for z in alle if z["ende"] > ab and z["start"] < bis]
         alle.sort(key=lambda z: (z["start"], z["sender"]))
 
         eintraege = []
@@ -238,11 +346,22 @@ class EpgOverviewScreen(Screen):
             self._poll.start(700, False)
         else:
             self["status"].setText(
-                _("%d Sendungen von %d Sendern — OK merkt vor")
-                % (len(eintraege), gesamt))
+                _("%s · %d Sendungen — GRÜN/GELB blättert Tage")
+                % (self._datum_text(), len(eintraege)))
 
     def _timer_setzen(self):
         """OK: markierte Sendung als Timer-Aufnahme vormerken."""
+        self._vormerken(None)
+
+    def _wiederholen(self):
+        """BLAU: Sendung als wiederkehrende Aufnahme vormerken.
+
+        Eine Serie laeuft meist woechchentlich zur gleichen Zeit — dann
+        reicht ein Timer, der sich selbst fortsetzt.
+        """
+        self._vormerken("woechentlich")
+
+    def _vormerken(self, wieder):
         sel = self["list"].getCurrent()
         if not sel or not sel[1]:
             return
@@ -256,20 +375,27 @@ class EpgOverviewScreen(Screen):
 
         url = self.api.creds.stream_url(z["stream_id"], "ts")
         name = "%s — %s" % (z["sender"], z["titel"])
+        zusatz = ""
+        if wieder == "woechentlich":
+            zusatz = _("\n\nWiederholt sich jede Woche am %s um %s.") % (
+                time.strftime("%A", time.localtime(z["start"])),
+                _zeit(z["start"]))
 
         def _bestaetigt(ja):
             if not ja:
                 return
-            recorder.get_scheduler().schedule(url, name, z["start"], z["ende"])
+            recorder.get_scheduler().schedule(url, name, z["start"], z["ende"],
+                                              wieder=wieder)
             self.session.open(
                 MessageBox,
-                _("Timer-Aufnahme geplant:\n%s\n%s–%s") % (
-                    name, _zeit(z["start"]), _zeit(z["ende"])),
+                _("Timer-Aufnahme geplant:\n%s\n%s–%s%s") % (
+                    name, _zeit(z["start"]), _zeit(z["ende"]),
+                    "\n(woechentlich)" if wieder else ""),
                 MessageBox.TYPE_INFO, timeout=6)
 
         self.session.openWithCallback(
             _bestaetigt, MessageBox,
-            _("Aufnahme vormerken:\n\n%s\n%s–%s\n\n%s\n\nFortfahren?") % (
-                name, _zeit(z["start"]), _zeit(z["ende"]),
+            _("Aufnahme vormerken:\n\n%s\n%s–%s%s\n\n%s\n\nFortfahren?") % (
+                name, _zeit(z["start"]), _zeit(z["ende"]), zusatz,
                 recorder.verbindungs_hinweis(self.api)),
             MessageBox.TYPE_YESNO)

@@ -195,6 +195,7 @@ class TimerScheduler(object):
                                 "url": t["url"], "name": t["name"],
                                 "start": int(t["start"]), "end": int(t["end"]),
                                 "proc": None, "done": False,
+                                "wieder": t.get("wieder"),
                             })
                     except Exception:
                         continue
@@ -205,7 +206,8 @@ class TimerScheduler(object):
     def _save(self):
         try:
             data = [{"url": t["url"], "name": t["name"],
-                     "start": t["start"], "end": t["end"]}
+                     "start": t["start"], "end": t["end"],
+                     "wieder": t.get("wieder")}
                     for t in self.timers if not t["done"]]
             with open(TIMERS_FILE, "w") as f:
                 json.dump(data, f)
@@ -225,12 +227,17 @@ class TimerScheduler(object):
                 datetime.datetime.fromtimestamp(t["start"]).strftime("%d.%m %H:%M"),
                 datetime.datetime.fromtimestamp(t["end"]).strftime("%H:%M")))
 
-    def schedule(self, url, name, start_ts, end_ts):
-        """Plant eine Aufnahme (Unix-Timestamps). Liefert die Timer-ID (dict)."""
+    def schedule(self, url, name, start_ts, end_ts, wieder=None):
+        """Plant eine Aufnahme (Unix-Timestamps). Liefert die Timer-ID (dict).
+
+        wieder: None = einmalig, "taeglich" = jeden Tag, "werktags" = Mo-Fr,
+        "woechentlich" = gleicher Wochentag zur gleichen Zeit. Nach dem Lauf
+        legt der Scheduler automatisch den naechsten Termin an.
+        """
         entry = {
             "url": url, "name": name,
             "start": int(start_ts), "end": int(end_ts),
-            "proc": None, "done": False,
+            "proc": None, "done": False, "wieder": wieder,
         }
         self.timers.append(entry)
         self._save()
@@ -300,9 +307,45 @@ class TimerScheduler(object):
                 t["done"] = True
                 changed = True
                 _log("STOPP %s" % t["name"])
+                # Wiederkehrende Aufnahme: naechsten Termin gleich anlegen,
+                # sonst waere sie nach einer Woche stillschweigend vorbei.
+                folge = self._folgetermin(t)
+                if folge:
+                    self.timers.append(folge)
+                    if not hasattr(self, "_neu"):
+                        self._neu = []
+                    self._neu.append(folge)
         if changed:
             self._save()
             self._ensure_running()
+
+    def _folgetermin(self, t):
+        """Naechster Termin einer wiederkehrenden Aufnahme (oder None)."""
+        art = t.get("wieder")
+        if art not in ("taeglich", "werktags", "woechentlich"):
+            return None
+        import datetime
+        start = datetime.datetime.fromtimestamp(t["start"])
+        dauer = t["end"] - t["start"]
+        # Woechentlich springt 7 Tage, taeglich/werktags einen Tag. Der
+        # Sprung muss VOR der Schleife stehen — mit festem 1 waere aus
+        # "jede Woche" stillschweigend "jeden Tag" geworden.
+        schritt = 7 if art == "woechentlich" else 1
+        for _ in range(14):
+            start = start + datetime.timedelta(days=schritt)
+            if art == "werktags" and start.weekday() >= 5:
+                # Samstag/Sonntag ueberspringen
+                continue
+            if start.timestamp() <= time.time():
+                continue
+            _log("FOLGE %s -> %s" % (t["name"], start.strftime("%d.%m %H:%M")))
+            return {
+                "url": t["url"], "name": t["name"],
+                "start": int(start.timestamp()),
+                "end": int(start.timestamp()) + dauer,
+                "proc": None, "done": False, "wieder": art,
+            }
+        return None
 
     def cancel(self, entry):
         if entry["proc"] is not None:

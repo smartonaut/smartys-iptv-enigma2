@@ -182,6 +182,46 @@ def ready():
     return _ready
 
 
+def zeitraum():
+    """Erster und letzter Zeitstempel im Cache (oder (None, None))."""
+    if not _ready or not _index:
+        return None, None
+    min_ts, max_ts = None, None
+    for zeilen in _index.values():
+        for s, e, _titel in zeilen:
+            if min_ts is None or s < min_ts:
+                min_ts = s
+            if max_ts is None or e > max_ts:
+                max_ts = e
+    return min_ts, max_ts
+
+
+def alle_sendungen(channel_name, ab_ts=None, stunden=12):
+    """Alle bevorstehenden Sendungen eines Senders aus dem Cache.
+
+    Fuer die EPG-Uebersicht: lookup() liefert nur jetzt/danach, hier kommt
+    das ganze Zeitfenster. Ohne Netzwerk, weil der Cache beim Start gefuellt
+    wird — die Uebersicht ist damit sofort da.
+    """
+    if not _ready or not channel_name:
+        return []
+    events = _index.get(normalize(channel_name))
+    if not events:
+        return []
+    if ab_ts is None:
+        ab_ts = time.time()
+    bis = ab_ts + stunden * 3600
+    return [(s, e, titel) for s, e, titel in events
+            if e > ab_ts and s < bis]
+
+
+def sende_namen():
+    """Alle Sender, fuer die der Cache Sendungen kennt (normalisiert)."""
+    if not _ready:
+        return []
+    return sorted(_index.keys())
+
+
 def lookup(channel_name):
     """Liefert (now_event, next_event) fuer den Kanal oder (None, None).
 

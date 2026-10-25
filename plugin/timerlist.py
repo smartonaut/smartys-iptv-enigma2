@@ -73,7 +73,15 @@ class TimerListScreen(Screen):
             name = t.get("name", "?")
             start = self._fmt(t.get("start"))
             end = self._fmt(t.get("end"))
-            entries.append(("%s   (%s – %s)" % (name, start, end), t))
+            art = t.get("wieder")
+            marker = ""
+            if art == "woechentlich":
+                marker = "  \u21bb w\u00f6chentlich"
+            elif art == "taeglich":
+                marker = "  \u21bb t\u00e4glich"
+            elif art == "werktags":
+                marker = "  \u21bb werktags"
+            entries.append(("%s   (%s – %s)%s" % (name, start, end, marker), t))
         self["list"].setList(entries)
         self["status"].setText(
             _("%d geplante Aufnahme(n) — OK zum Abbrechen") % len(entries))
