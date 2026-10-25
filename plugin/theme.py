@@ -198,10 +198,10 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
         # wird der Bereich aus der OSD-Ebene ausgespart und das laufende
         # Video scheint durch.
         teile.append(
-            f'<widget source="session.VideoPicture" '
+            f'<widget source="session.VideoPicture" render="Pig" '
             f'position="{scale(808)},{scale_y(karte_y + 2)}" '
             f'size="{scale(422)},{scale_y(250)}" '
-            f'zPosition="5" alphatest="blend" />'
+            f'backgroundColor="#ff000000" transparent="1" zPosition="5" />'
         )
 
     # Liste
