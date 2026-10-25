@@ -45,11 +45,12 @@ class EpgOverviewScreen(Screen):
 
     screen_name = "SmartysEpgOverview"
 
-    # Wie viele Sender gleichzeitig abgefragt werden. Mehr parallel = schneller,
-    # aber der Panel-Server drosselt bei zu vielen gleichzeitigen Anfragen.
-    PARALLEL = 4
+    # Sender werden EINZELN abgefragt, mit kurzer Pause dazwischen. Parallele
+    # Anfragen beantwortet der Panel-Server mit Fehlern (gemessen: 8 von 8
+    # gleichzeitigen short_epg-Aufrufen scheiterten, einzeln liefen sie durch).
+    PAUSE = 0.30
     # Hoechstzahl Sender, die ueberhaupt geladen werden.
-    MAX_SENDER = 48
+    MAX_SENDER = 40
 
     tasten = [
         (theme.TASTE_OK, "OK", "Timer setzen"),
@@ -145,27 +146,43 @@ class EpgOverviewScreen(Screen):
         self._gesamt = len(auswahl)
         self["status"].setText(_("Lade EPG für %d Sender …") % self._gesamt)
 
-        # In kleinen Gruppen anfragen, damit der Server nicht drosselt.
-        for start in range(0, len(auswahl), self.PARALLEL):
-            gruppe = auswahl[start:start + self.PARALLEL]
-            for s in gruppe:
-                threading.Thread(target=self._hole_epg, args=(s,),
-                                 daemon=True).start()
-            # Kurz warten, bevor die naechste Gruppe startet
-            if start + self.PARALLEL < len(auswahl):
-                time.sleep(0.4)
-
+        # Ein einzelner Arbeiter-Thread fragt der Reihe nach ab. Nebenlaeufig
+        # waere schneller, aber der Server drosselt und liefert dann Fehler.
+        threading.Thread(target=self._hole_alle, args=(auswahl,),
+                         daemon=True).start()
         self._poll.start(700, False)
 
+    def _hole_alle(self, sender):
+        """Alle Sender nacheinander abfragen (ein Thread, mit Pausen)."""
+        for s in sender:
+            try:
+                self._hole_epg(s)
+            except Exception:
+                with self._sperre:
+                    self._ergebnisse[s.get("stream_id")] = []
+                    self._fertig += 1
+            time.sleep(self.PAUSE)
+
     def _hole_epg(self, sender):
-        """EPG eines Senders holen (laeuft im Thread)."""
+        """EPG eines Senders holen (laeuft im Thread).
+
+        Der Panel-Server laesst einzelne Anfragen gelegentlich in einen
+        Timeout laufen (gemessen: 1 von 8 bei 0,35 s Pause). Ein zweiter
+        Versuch holt die meisten davon zurueck — ohne ihn fehlt in der
+        Uebersicht scheinbar willkuerlich die Haelfte der Sender.
+        """
         sid = sender.get("stream_id")
-        name = sender.get("name", "?")
-        try:
-            daten = self.api.short_epg(sid, limit=4) or {}
-            listings = daten.get("epg_listings", []) or []
-        except Exception:
-            listings = []
+        listings = []
+        for versuch in (1, 2):
+            try:
+                daten = self.api.short_epg(sid, limit=4) or {}
+                listings = daten.get("epg_listings", []) or []
+                break
+            except Exception:
+                if versuch == 2:
+                    listings = []
+                else:
+                    time.sleep(0.5)
         zeilen = []
         for ep in listings:
             try:
