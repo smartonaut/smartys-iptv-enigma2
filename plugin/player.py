@@ -31,11 +31,16 @@ def play_service(session, url, servicetype=SERVICE_GSTREAMER):
 
 
 def open_player(session, url, servicetype=SERVICE_GSTREAMER, name="",
-                stream_id=None, api=None, stream_icon=None):
-    """Öffnet den Vollbild-StreamPlayer-Screen (mit EPG-Infobar)."""
+                stream_id=None, api=None, stream_icon=None,
+                next_url=None, next_name=""):
+    """Öffnet den Vollbild-StreamPlayer-Screen (mit EPG-Infobar).
+
+    next_url/next_name: naechste Folge — laeuft der Dienst aus, startet der
+    Player sie selbst (Auto-Next fuer Serien).
+    """
     from .streamplayer import StreamPlayerScreen
     session.open(StreamPlayerScreen, url, servicetype, name, stream_id,
-                 api, stream_icon)
+                 api, stream_icon, next_url, next_name)
 
 
 def download_trailer(url):

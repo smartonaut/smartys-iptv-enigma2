@@ -41,7 +41,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     """Vollbild-Player für einen IPTV-Stream, mit EPG-Infobar."""
 
     def __init__(self, session, url, servicetype=4097, name="",
-                 stream_id=None, api=None, stream_icon=None):
+                 stream_id=None, api=None, stream_icon=None,
+                 next_url=None, next_name=""):
         Screen.__init__(self, session)
         self.session = session
         self.streamurl = url
@@ -50,6 +51,16 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self.stream_id = stream_id
         self.api = api
         self.stream_icon = stream_icon or ""
+        try:
+            self.onClose.append(self._on_close_flags)
+        except Exception:
+            pass
+        # Naechste Folge (Serien): laeuft der Dienst aus, startet der Player
+        # sie selbst — Paritaet zum Auto-Next der anderen Plattformen.
+        self._next_url = next_url
+        self._next_name = next_name or ""
+        self._closed = False
+        self._end_timer = None
 
         # EPG-Daten (start_timestamp / stop_timestamp / titel)
         self._epg_now = None
@@ -183,6 +194,14 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     # --- Playback + EPG ---
 
+    def _on_close_flags(self):
+        self._closed = True
+        try:
+            if self._end_timer is not None:
+                self._end_timer.stop()
+        except Exception:
+            pass
+
     def play_stream(self, watchdog=True):
         try:
             ref = eServiceReference(int(self.servicetype), 0, self.streamurl)
@@ -194,6 +213,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self._show_infobar()
         if watchdog:
             self._watchdog_start()
+            self._end_watch_start()
 
     # ------------------------------------------------------------------
     # Verbindungswaechter
@@ -205,6 +225,38 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     # Anlaufphase (Pufferaufbau ist kein Stillstand) und nicht waehrend
     # Timeshift oder Aufnahme.
     # ------------------------------------------------------------------
+
+    def _end_watch_start(self):
+        """Merkt, wenn der Dienst von selbst endet (VOD zu Ende) und startet
+        dann die naechste Folge."""
+        if not self._next_url:
+            return
+        if self._end_timer is None:
+            self._end_timer = eTimer()
+            try:
+                self._end_timer.callback.append(self._end_tick)
+            except Exception:
+                self._end_timer.timeout.connect(self._end_tick)
+        try:
+            self._end_timer.start(5000, False)
+        except Exception:
+            pass
+
+    def _end_tick(self):
+        try:
+            if self._closed or not self._next_url:
+                return
+            if self.session.nav.getCurrentService() is not None:
+                return
+            # Dienst weg -> naechste Folge uebernehmen
+            self._next_url, url = None, self._next_url
+            name, self._next_name = self._next_name, ""
+            self.streamurl = url
+            self.stream_name = name
+            self._end_timer.stop()
+            self.play_stream()
+        except Exception:
+            pass
 
     def _watchdog_start(self):
         self._wd_start = time.time()

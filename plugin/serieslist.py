@@ -247,6 +247,7 @@ class EpisodeListScreen(Screen):
                 ep = dict(ep)
                 ep["_season"] = season
                 flat.append(ep)
+        self._flat = flat
         self["list"].setList([
             ("S%sE%s — %s" % (
                 e.get("_season", "?"),
@@ -262,5 +263,21 @@ class EpisodeListScreen(Screen):
         ep_id = item.get("id")
         ext = item.get("container_extension") or "mp4"
         url = self.api.creds.series_url(ep_id, ext)
+        # Auto-Next: die naechste Folge der Liste mitgeben. Laeuft der
+        # Stream aus, wechselt der Player selbst weiter.
+        next_url, next_name = None, ""
+        try:
+            flach = getattr(self, "_flat", [])
+            idx = self["list"].getSelectedIndex()
+            if idx is not None and 0 <= idx < len(flach) - 1:
+                nxt = flach[idx + 1]
+                n_ext = nxt.get("container_extension") or "mp4"
+                next_url = self.api.creds.series_url(nxt.get("id"), n_ext)
+                next_name = "S%sE%s — %s" % (
+                    nxt.get("_season", "?"), nxt.get("episode_num", "?"),
+                    _b64(nxt.get("title") or ""))
+        except Exception:
+            pass
         vlc_player.open_player(self.session, url, name=self._name,
-                               servicetype=vlc_player.SERVICE_EXTPLAYER3)
+                               servicetype=vlc_player.SERVICE_EXTPLAYER3,
+                               next_url=next_url, next_name=next_name)
