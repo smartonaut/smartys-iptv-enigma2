@@ -50,10 +50,15 @@ def _wrap(text, width=52):
 class VodDetailScreen(Screen):
     """Film-Detailseite: Cover links, Beschreibung rechts."""
 
-    def __init__(self, session, api, stream_id, name="", stream_icon=None):
+    def __init__(self, session, api, stream_id, name="", stream_icon=None,
+                 container_extension=None):
         self.api = api
         self.stream_id = stream_id
         self.name = name
+        # Endung aus der API (mkv, mp4, avi …). Der Server liefert eine Datei
+        # nur unter ihrer echten Endung; mit einer falschen antwortet er mit
+        # HTTP 551 und der Player bleibt schwarz. None = beim Abspielen holen.
+        self.container_extension = container_extension
         self.stream_icon = stream_icon or ""
 
         w, h = theme.osd_size()
@@ -181,8 +186,23 @@ class VodDetailScreen(Screen):
             pass
         self["poster"].hide()
 
+    def _endung(self):
+        """Echte Dateiendung des Films besorgen (und merken)."""
+        if self.container_extension:
+            return self.container_extension
+        try:
+            info = self.api.vod_info(self.stream_id) or {}
+            daten = info.get("movie_data") or {}
+            ext = daten.get("container_extension")
+            if ext:
+                self.container_extension = ext
+                return ext
+        except Exception:
+            pass
+        return "mp4"
+
     def play(self):
-        ext = "mp4"
+        ext = self._endung()
         url = self.api.creds.movie_url(self.stream_id, ext)
         vlc_player.open_player(self.session, url, name=self.name,
                                servicetype=vlc_player.SERVICE_EXTPLAYER3)

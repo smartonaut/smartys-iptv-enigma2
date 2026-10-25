@@ -156,4 +156,8 @@ class VodListScreen(Screen):
         name = item.get("name", "")
         stream_icon = item.get("stream_icon", "")
         from .voddetail import VodDetailScreen
-        self.session.open(VodDetailScreen, self.api, stream_id, name, stream_icon)
+        # Endung mitgeben: der Server liefert die Datei nur unter ihrer
+        # echten Endung, sonst HTTP 551 und schwarzes Bild.
+        ext = item.get("container_extension") if isinstance(item, dict) else None
+        self.session.open(VodDetailScreen, self.api, stream_id, name,
+                          stream_icon, ext)
