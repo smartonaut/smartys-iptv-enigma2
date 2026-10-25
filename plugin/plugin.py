@@ -13,26 +13,38 @@ from Plugins.Plugin import PluginDescriptor
 from Components.PluginComponent import plugins  # noqa: F401
 
 
+def _session_finden(args, kwargs):
+    s = kwargs.get("session")
+    if s is not None and hasattr(s, "open"):
+        return s
+    for a in args:
+        if hasattr(a, "open") and hasattr(a, "nav"):
+            return a
+    return None
+
+
 def main(*args, **kwargs):
-    from .mainmenu import MainMenuScreen
-
-    # WICHTIG: Bei WHERE_MENU ruft Enigma2 diesen Einstiegspunkt bereits beim
-    # AUFBAU des Hauptmenues auf, um die Beschreibung abzufragen — dann kommt
-    # nur ein menuid-String, keine Session. Wer hier blind einen Screen
-    # oeffnet, crasht mit "Modal open are allowed only from a screen which is
-    # modal". Beim echten Klick uebergibt Enigma2 dagegen die Session.
-    session = kwargs.get("session")
-    if session is None or not hasattr(session, "open"):
-        session = None
-        for a in args:
-            if hasattr(a, "open") and hasattr(a, "nav"):
-                session = a
-                break
-
+    """Klick-Handler (WHERE_PLUGINMENU / Erweiterungen)."""
+    session = _session_finden(args, kwargs)
     if session is None:
-        return "IPTV-Player fuer Smartys (Live-TV, Filme, Serien)"
-
+        return
+    from .mainmenu import MainMenuScreen
     session.open(MainMenuScreen)
+
+
+def _menu_container(menuid="", **kwargs):
+    """Container fuer WHERE_MENU.
+
+    Enigma2 ruft diese Funktion schon beim AUFBAU des Hauptmenues auf und
+    iteriert ueber die Rueckgabe. Erwartet werden Tupel
+    (Text, Funktion, Key) — NICHT PluginDescriptor-Objekte, die sind nicht
+    subscriptable und werfen "'PluginDescriptor' object is not subscriptable".
+    Die Funktion im Tupel wird beim Klick mit der Session aufgerufen; ein
+    direktes session.open() hier drin reisst das ganze Hauptmenue mit.
+    """
+    if menuid and menuid != "mainmenu":
+        return []
+    return [("Smartys IPTV", main, "smartys_iptv", False)]
 
 
 def sessionstart(reason=0, session=None, **kwargs):
@@ -58,6 +70,7 @@ def Plugins(**kwargs):
         _show_in_menu = False
     _menu_where = (PluginDescriptor.WHERE_MENU if _show_in_menu
                    else PluginDescriptor.WHERE_PLUGINMENU)
+    _menu_fnc = _menu_container if _show_in_menu else main
     return [
         # Plugin-Menü (Hauptmenü, direkt oder unter Erweiterungen/Plugins)
         PluginDescriptor(
@@ -65,7 +78,7 @@ def Plugins(**kwargs):
             description="IPTV-Player für Smartys (Live-TV, Filme, Serien)",
             where=_menu_where,
             icon=icon_file,
-            fnc=main,
+            fnc=_menu_fnc,
         ),
         # Erweiterungs-Browser (grüne Taste)
         PluginDescriptor(
