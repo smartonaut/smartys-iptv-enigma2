@@ -105,6 +105,15 @@ def exportiere(pfad=None):
         from enigma import eServiceCenter
 
         cache = eEPGCache.getInstance()
+
+        # Diagnose: liegt ueberhaupt etwas im Cache? Ohne diese Zahl ist
+        # "0 Sendungen" nicht zu deuten — leerer Cache oder falscher Aufruf.
+        try:
+            probe = cache.lookupEvent(
+                ["IBD", ("1:0:19:283D:41B:1:FFFF0000:0:0:0:", -1, -1, 1440)]) or []
+            _log("Probe ARD: %d Events" % len(probe))
+        except Exception as e:
+            _log("Probe fehlgeschlagen: %r" % (e,))
         # Ueber die Serviceliste gehen statt ueber eine Sammel-Suche: das ist
         # der dokumentierte Weg (search(("B", ...)) ist nicht verlaesslich)
         # und liefert zu jedem Sender den Anzeigenamen mit.
@@ -151,43 +160,64 @@ def exportiere(pfad=None):
             # trotz gefuelltem Cache 0 Events. search(("I", ref)) ist der
             # aeltere, weiter verbreitete Aufruf — je nach Image ist nur
             # einer von beiden implementiert.
-            events = []
-            try:
-                events = cache.lookupService(ref) or []
-            except Exception as e:
-                _log("lookupService-Fehler: %r" % (e,))
-            if not events:
-                try:
-                    erg = cache.search(("I", ref)) or []
-                    # search liefert (ref, begin, duration, title, ...)
-                    for zeile in erg:
-                        try:
-                            start = int(zeile[1])
-                            ende = start + int(zeile[2])
-                            if ende <= jetzt or start >= bis:
-                                continue
-                            zeilen.append([start, ende, zeile[3] or ""])
-                        except Exception:
-                            continue
-                    if zeilen:
-                        _log("  %s: %d via search()" % (name, len(zeilen)))
-                        zeilen.sort()
-                        ergebnis[key] = zeilen
-                        anzahl += len(zeilen)
-                        continue
-                except Exception as e:
-                    _log("search-Fehler: %r" % (e,))
             zeilen = []
+            # Der dokumentierte Weg fuer "alle Sendungen eines Senders" ist
+            # lookupEvent, NICHT lookupService (existiert nicht) und NICHT
+            # search (das sucht nur nach Titel/CRID und braucht einen
+            # querytype 0..6 an Position 2).
+            #   lookupEvent([ flags, (ref, type, eventid/stime, minutes), ... ])
+            #   type -1 = ab jetzt, minutes 1440 = 24 Stunden voraus
+            events = []
+            _refstr = ref.toString()
+            try:
+                events = cache.lookupEvent(
+                    ["IBDT", (_refstr, -1, -1, 1440)]) or []
+            except Exception as e:
+                _log("lookupEvent-Fehler: %r" % (e,))
+            # Erste drei Sender mit dem exakten String protokollieren, der
+            # an lookupEvent geht — die Probe mit hartkodiertem ARD-String
+            # liefert 35 Events, die Schleife 0. Der Unterschied kann nur
+            # hier liegen.
+            if anzahl == 0 and len(ergebnis) == 0 and _refstr.count(":") > 5:
+                if not getattr(exportiere, "_probe_gezeigt", False):
+                    exportiere._probe_gezeigt = True
+                    _log("Vergleich: ref=%r -> %d Events" % (_refstr, len(events)))
+            # Kein Fallback mehr: lookupEvent ist der dokumentierte Weg und
+            # liefert auf openATV nachweislich Events (Probe: 35 fuer ARD).
+            # search() sucht nur nach Titel/CRID und braucht an Position 2
+            # einen querytype 0..6 — jeder Versuch dort endet im TypeError.
+            if not events:
+                _log("  %s: keine Events" % name)
+
             for ev in events:
+                # lookupEvent liefert TUPEL, keine Event-Objekte. Die
+                # Reihenfolge folgt dem Flag-String "IBD":
+                #   ev[0] = Event-Id, ev[1] = Beginn, ev[2] = Dauer
+                # Mit ev.getBeginTime() kam ein AttributeError, den der
+                # except-Zweig verschluckte — deshalb stand im Log
+                # "635 Services, 0 Sendungen", obwohl 35 Events ankamen.
                 try:
-                    start = ev.getBeginTime()
-                    ende = start + ev.getDuration()
-                    if ende <= jetzt or start >= bis:
+                    start = int(ev[1])
+                    dauer = int(ev[2])
+                except (IndexError, TypeError, ValueError):
+                    # Aeltere Images liefern die Titel-Suche als Objekte
+                    try:
+                        start = int(ev.getBeginTime())
+                        dauer = int(ev.getDuration())
+                    except Exception:
                         continue
-                    zeilen.append([int(start), int(ende),
-                                   ev.getEventName() or ""])
-                except Exception:
+                ende = start + dauer
+                if ende <= jetzt or start >= bis:
                     continue
+                titel = ""
+                if isinstance(ev, (list, tuple)) and len(ev) > 3:
+                    titel = str(ev[3] or "")
+                else:
+                    try:
+                        titel = str(ev.getEventName() or "")
+                    except Exception:
+                        titel = ""
+                zeilen.append([start, ende, titel])
             if zeilen:
                 zeilen.sort()
                 ergebnis[key] = zeilen
