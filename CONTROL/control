@@ -1,5 +1,5 @@
 Package: enigma2-plugin-extensions-smartysiptv
-Version: 0.3.0
+Version: 0.4.0
 Description: Smartys IPTV-Player (Live-TV, Filme, Serien) für OpenATV/Enigma2 — Beta (lokale Line-Eingabe, AES-256-Verschlüsselung, Handy-Passworteingabe, Pairing löschen)
 Section: extensions
 Priority: optional
