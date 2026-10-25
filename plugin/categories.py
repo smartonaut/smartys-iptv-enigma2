@@ -67,9 +67,24 @@ class CategoryListScreen(Screen):
         )
         self.onLayoutFinish.append(self._load)
 
+    def _cfg_key(self):
+        """Config-Schluessel fuer diesen Bereich.
+
+        Live-TV, Filme und Serien fuehren getrennte Listen: die Kategorienamen
+        ueberschneiden sich (Sport, Kinder, DE), ein gemeinsamer Schluessel
+        wuerde beim Ausblenden in einer Ebene die anderen mit ausblenden.
+        """
+        bereich = (self.category_action or "").replace("_categories", "")
+        return "hidden_categories_%s" % (bereich or "live")
+
     def _hidden(self):
         """Namen der ausgeblendeten Gruppen (Liste, stabil sortiert)."""
-        wert = self.cfg.get("hidden_categories", [])
+        wert = self.cfg.get(self._cfg_key(), [])
+        # Altbestand: vor der Bereichstrennung lag alles in einem globalen
+        # Schluessel. Diese Namen gehoeren zu Live-TV, dort weiterverwenden,
+        # damit eine bestehende Auswahl nicht verloren geht.
+        if not wert and self._cfg_key() == "hidden_categories_live":
+            wert = self.cfg.get("hidden_categories", [])
         if isinstance(wert, dict):
             # Altbestand: frueher als {name: true} gespeichert
             return sorted([k for k, v in wert.items() if v])
@@ -78,7 +93,7 @@ class CategoryListScreen(Screen):
         return []
 
     def _set_hidden(self, namen):
-        self.cfg.set("hidden_categories", sorted(set(namen)))
+        self.cfg.set(self._cfg_key(), sorted(set(namen)))
         try:
             self.cfg.save()
         except Exception:

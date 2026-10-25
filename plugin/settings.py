@@ -85,14 +85,8 @@ class SettingsScreen(Screen):
             % SORT_NAMEN.get(modus, SORT_NAMEN["original"]),
             ("sort", None)))
 
-        # Ausgeblendete Gruppen
-        versteckt = self.cfg.get("hidden_categories", [])
-        if isinstance(versteckt, dict):
-            anzahl = len([k for k, v in versteckt.items() if v])
-        elif isinstance(versteckt, (list, tuple)):
-            anzahl = len(versteckt)
-        else:
-            anzahl = 0
+        # Ausgeblendete Gruppen — je Bereich getrennt gezaehlt
+        anzahl = sum(len(v) for v in self._versteckte().values())
         if anzahl:
             entries.append((
                 "Ausgeblendete Gruppen:  %d  (OK = alle wieder zeigen)" % anzahl,
@@ -175,15 +169,40 @@ class SettingsScreen(Screen):
         self._rebuild()
         self["status"].setText(_("Sortierung: %s") % SORT_NAMEN.get(neu, neu))
 
+    # Bereiche mit eigenen Ausblend-Listen (siehe categories._cfg_key)
+    BEREICHE = (
+        ("hidden_categories_live", "Live-TV"),
+        ("hidden_categories_vod", "Filme"),
+        ("hidden_categories_series", "Serien"),
+    )
+
+    def _versteckte(self):
+        """{Bereichsname: [ausgeblendete Gruppen]} fuer alle drei Ebenen."""
+        raus = {}
+        for key, name in self.BEREICHE:
+            wert = self.cfg.get(key, [])
+            if isinstance(wert, dict):
+                namen = sorted([k for k, v in wert.items() if v])
+            elif isinstance(wert, (list, tuple)):
+                namen = [str(x) for x in wert]
+            else:
+                namen = []
+            # Altbestand: die fruehere globale Liste gilt fuer Live-TV
+            if not namen and key == "hidden_categories_live":
+                alt = self.cfg.get("hidden_categories", [])
+                if isinstance(alt, (list, tuple)):
+                    namen = [str(x) for x in alt]
+            raus[name] = namen
+        return raus
+
     def _zeige_versteckte(self):
         """Zeigt die ausgeblendeten Gruppen und bietet das Zuruecksetzen an."""
-        versteckt = self.cfg.get("hidden_categories", [])
-        if isinstance(versteckt, dict):
-            namen = sorted([k for k, v in versteckt.items() if v])
-        elif isinstance(versteckt, (list, tuple)):
-            namen = [str(x) for x in versteckt]
-        else:
-            namen = []
+        alle = self._versteckte()
+        zeilen = []
+        for name, namen in alle.items():
+            if namen:
+                zeilen.append("%s: %s" % (name, ", ".join(namen)))
+        namen = zeilen
         if not namen:
             self["status"].setText(
                 _("Keine Gruppen ausgeblendet (in der Kategorienliste mit GELB)"))
@@ -192,6 +211,8 @@ class SettingsScreen(Screen):
         def _antwort(ja):
             if not ja:
                 return
+            for key, _name in self.BEREICHE:
+                self.cfg.set(key, [])
             self.cfg.set("hidden_categories", [])
             try:
                 self.cfg.save()
@@ -204,7 +225,7 @@ class SettingsScreen(Screen):
             _antwort,
             MessageBox,
             _("Diese Gruppen sind ausgeblendet:\n\n%s\n\nAlle wieder einblenden?")
-            % ("\n".join("• " + n for n in namen)),
+            % ("\n".join("• " + z for z in namen)),
             MessageBox.TYPE_YESNO,
         )
 
