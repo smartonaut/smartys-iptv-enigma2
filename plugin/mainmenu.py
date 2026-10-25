@@ -14,7 +14,7 @@ class MainMenuScreen(Screen):
     def __init__(self, session):
         self.skin = theme.build_skin(
             "SmartysMainMenu",
-            footer="OK = Auswahl   ·   EXIT = Beenden")
+            tasten=[(theme.TASTE_OK, "OK", "Auswahl"), (None, "EXIT", "Beenden")])
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()
@@ -41,7 +41,7 @@ class MainMenuScreen(Screen):
             (_("Live-TV"), self.open_live),
             (_("Filme (VOD)"), self.open_vod),
             (_("Serien"), self.open_series),
-            (_("🔎 Suche"), self.open_search),
+            (_("Suche"), self.open_search),
             (_("Timer-Aufnahmen"), self.open_timers),
             (_("Einstellungen"), self.open_prefs),
             (_("Line lokal eingeben"), self.open_line_entry),

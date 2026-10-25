@@ -43,7 +43,7 @@ class EpgScreen(Screen):
     def __init__(self, session, api, stream_id, channel_name):
         self.skin = theme.build_skin(
             "SmartysEpg", logo=False,
-            footer="REC = Timer-Aufnahme   ·   OK = sofort aufnehmen   ·   EXIT = Zurück")
+            tasten=[(theme.TASTE_ROT, "REC", "Timer-Aufnahme"), (theme.TASTE_OK, "OK", "sofort aufnehmen"), (None, "EXIT", "Zurück")])
         Screen.__init__(self, session)
         self.session = session
         self.api = api

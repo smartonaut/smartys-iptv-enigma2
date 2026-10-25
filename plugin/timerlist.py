@@ -19,7 +19,7 @@ class TimerListScreen(Screen):
     def __init__(self, session):
         self.skin = theme.build_skin(
             "SmartysTimers",
-            footer="OK = Abbrechen   ·   EXIT = Zurück")
+            tasten=[(theme.TASTE_OK, "OK", "Abbrechen"), (None, "EXIT", "Zurück")])
         Screen.__init__(self, session)
         self.session = session
 

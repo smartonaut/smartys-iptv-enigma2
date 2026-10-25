@@ -25,7 +25,7 @@ class SettingsScreen(Screen):
         # Enigma2 den Screen mit dem Default-Skin (siehe alle anderen Screens).
         self.skin = theme.build_skin(
             "SmartysSettings", logo=True,
-            footer="OK = Ändern   ·   EXIT = Zurück")
+            tasten=[(theme.TASTE_OK, "OK", "Ändern"), (None, "EXIT", "Zurück")])
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()

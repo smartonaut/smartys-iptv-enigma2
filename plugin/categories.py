@@ -28,7 +28,7 @@ class CategoryListScreen(Screen):
                  list_header, list_subtitle):
         self.skin = theme.build_skin(
             self.screen_name,
-            footer="OK = Öffnen   ·   EXIT = Zurück")
+            tasten=[(theme.TASTE_OK, "OK", "Öffnen"), (None, "EXIT", "Zurück")])
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg

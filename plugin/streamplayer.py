@@ -60,61 +60,75 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self._ts_end_timer = None
 
         w, h = theme.osd_size()
-        # Transparenter Vollbild-Skin + Infobar unten.
+        # Transparenter Vollbild-Skin + Infobar unten (Android-Stil: linksbündiges
+        # Panel mit Abstand, 40% alpha Dunkelblau #660b0e14, abgerundete Optik).
         self.skin = (
             '<screen name="SmartysStreamPlayer" position="0,0" '
             'size="%d,%d" backgroundColor="transparent" flags="wfNoBorder">'
             '<widget name="actions" position="0,0" size="1,1" '
             'transparent="1" zPosition="0"/>'
-            # --- Infobar (unten) ---
-            '<widget name="infobar_bg" position="0,%d" '
-            'size="%d,%d" backgroundColor="#a0000000" zPosition="3"/>'
+            # --- Infobar (unten links) ---
+            '<widget name="infobar_bg" position="%d,%d" '
+            'size="%d,%d" backgroundColor="#660b0e14" zPosition="3"/>'
             # Picon (Programm-Logo)
             '<widget name="logo" position="%d,%d" size="%d,%d" '
             'alphatest="blend" zPosition="4"/>'
             '<widget name="nowchannel" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="#ffffff" transparent="1" '
-            'halign="left" valign="center" noWrap="1" zPosition="4"/>'
-            '<widget name="nowtitle" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="#ffc94d" transparent="1" '
+            'font="Regular;%d" foregroundColor="#e8eefc" transparent="1" '
             'halign="left" valign="center" noWrap="1" zPosition="4"/>'
             '<widget name="nowtime" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="#ffffff" transparent="1" '
+            'font="Regular;%d" foregroundColor="#e8eefc" transparent="1" '
             'halign="right" valign="center" zPosition="4"/>'
+            '<widget name="recbadge" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="#ff6b6b" transparent="1" '
+            'halign="left" valign="center" noWrap="1" zPosition="4"/>'
             '<widget name="videoinfo" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="#ffc94d" transparent="1" '
             'halign="right" valign="center" noWrap="1" zPosition="4"/>'
+            '<widget name="nowtitle" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="#ffc94d" transparent="1" '
+            'halign="left" valign="center" noWrap="1" zPosition="4"/>'
+            '<widget name="nexttitle" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="#8fa3c8" transparent="1" '
+            'halign="left" valign="center" noWrap="1" zPosition="4"/>'
             '<widget name="progress" position="%d,%d" size="%d,%d" '
-            'foregroundColor="#ffc94d" backgroundColor="#20000000" '
+            'foregroundColor="#ffc94d" backgroundColor="#232c42" '
             'zPosition="4"/>'
             '<widget name="help" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="#888888" transparent="1" '
             'halign="left" valign="center" noWrap="1" zPosition="4"/>'
             '</screen>' % (
                 w, h,
-                # Infobar-Hintergrund: unten, volle Breite (höher für Help)
-                theme.scale_y(600), w, theme.scale_y(160),
+                # Infobar-Hintergrund: unten links, Android-Stil
+                theme.scale(20), theme.scale_y(580), theme.scale(800),
+                theme.scale_y(140),
                 # logo (Picon)
-                theme.scale(20), theme.scale_y(608), theme.scale(60),
-                theme.scale_y(60),
-                # nowchannel
-                theme.scale(110), theme.scale_y(610), theme.scale(770),
-                theme.scale_y(42), theme.font(26),
-                # nowtitle
-                theme.scale(110), theme.scale_y(656), theme.scale(770),
-                theme.scale_y(32), theme.font(20),
-                # nowtime (rechts)
-                theme.scale(900), theme.scale_y(610), theme.scale(330),
-                theme.scale_y(42), theme.font(26),
-                # videoinfo (rechts, unter der Uhrzeit)
-                theme.scale(900), theme.scale_y(656), theme.scale(330),
-                theme.scale_y(32), theme.font(20),
-                # progress (dünner Balken, unter dem Titel)
-                theme.scale(110), theme.scale_y(692), theme.scale(770),
-                theme.scale_y(6),
+                theme.scale(36), theme.scale_y(594), theme.scale(56),
+                theme.scale_y(56),
+                # nowchannel (Sendername)
+                theme.scale(104), theme.scale_y(592), theme.scale(400),
+                theme.scale_y(28), theme.font(23),
+                # nowtime (Uhrzeit, rechts)
+                theme.scale(660), theme.scale_y(592), theme.scale(144),
+                theme.scale_y(28), theme.font(21),
+                # recbadge (Aufnahme-Laufanzeige)
+                theme.scale(104), theme.scale_y(622), theme.scale(220),
+                theme.scale_y(20), theme.font(14),
+                # videoinfo (Auflösung, rechts)
+                theme.scale(660), theme.scale_y(622), theme.scale(144),
+                theme.scale_y(20), theme.font(14),
+                # nowtitle (EPG jetzt, mit Zeiten)
+                theme.scale(104), theme.scale_y(646), theme.scale(700),
+                theme.scale_y(28), theme.font(18),
+                # nexttitle (EPG danach)
+                theme.scale(104), theme.scale_y(674), theme.scale(700),
+                theme.scale_y(20), theme.font(15),
+                # progress (dünner goldener Balken)
+                theme.scale(36), theme.scale_y(694), theme.scale(760),
+                theme.scale_y(4),
                 # help (Tastenerklärung, ganz unten)
-                theme.scale(20), theme.scale_y(706), theme.scale(1240),
-                theme.scale_y(22), theme.font(16),
+                theme.scale(20), theme.scale_y(704), theme.scale(800),
+                theme.scale_y(14), theme.font(13),
             )
         )
 
@@ -124,6 +138,8 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         self["nowtitle"] = Label()
         self["nowtime"] = Label()
         self["videoinfo"] = Label()
+        self["recbadge"] = Label()
+        self["nexttitle"] = Label()
         self["progress"] = ProgressBar()
         self["logo"] = Pixmap()
         self["infobar_bg"] = Label()
@@ -228,7 +244,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             print("[SmartysIPTV] EPG-Backup-Fehler: %r" % e)
 
     def _apply_epg(self):
-        """Setzt Sendername, Titel (mit Sendezeit) und Laufzeit-Balken."""
+        """Setzt Sendername, Titel (mit Sendezeit), Danach-Zeile und Balken."""
         self["nowchannel"].setText(self.stream_name or "")
         title = ""
         if self._epg_now:
@@ -239,6 +255,17 @@ class StreamPlayerScreen(InfoBarBase, Screen):
                 title = "%s   (%s - %s)" % (
                     title, self._fmt_ts(start), self._fmt_ts(end))
         self["nowtitle"].setText(title)
+        # "Danach: HH:MM Titel" (Android-Stil)
+        if self._epg_next:
+            nxt_title = self._b64(self._epg_next.get("title", ""))
+            nxt_start = self._epg_next.get("start_timestamp", "")
+            if nxt_start:
+                self["nexttitle"].setText(
+                    "Danach:  %s  %s" % (self._fmt_ts(nxt_start), nxt_title))
+            else:
+                self["nexttitle"].setText("Danach:  %s" % nxt_title)
+        else:
+            self["nexttitle"].setText("")
         self._load_logo()
         self._load_videoinfo()
         self._refresh_clock()
@@ -354,11 +381,12 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     def _show_infobar(self):
         self._infobar_visible = True
         for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
-                  "progress", "help", "infobar_bg"):
+                  "recbadge", "nexttitle", "progress", "help", "infobar_bg"):
             try:
                 self[w].show()
             except Exception:
                 pass
+        self._refresh_recbadge()
         self._refresh_clock()
         self._progress_timer.start(30000, False)
         self._hide_timer.start(6000, True)
@@ -366,11 +394,26 @@ class StreamPlayerScreen(InfoBarBase, Screen):
     def _hide_infobar(self):
         self._infobar_visible = False
         for w in ("nowchannel", "nowtitle", "nowtime", "videoinfo",
-                  "progress", "help", "infobar_bg", "logo"):
+                  "recbadge", "nexttitle", "progress", "help", "infobar_bg",
+                  "logo"):
             try:
                 self[w].hide()
             except Exception:
                 pass
+
+    def _refresh_recbadge(self):
+        """Zeigt das REC-Badge, solange eine Aufnahme läuft."""
+        try:
+            rec = recorder.get_recorder()
+            if rec.recording:
+                self["recbadge"].setText("● REC")
+                if self._infobar_visible:
+                    self["recbadge"].show()
+            else:
+                self["recbadge"].setText("")
+                self["recbadge"].hide()
+        except Exception:
+            pass
 
     def _auto_hide(self):
         self._hide_infobar()
@@ -381,14 +424,17 @@ class StreamPlayerScreen(InfoBarBase, Screen):
         rec = recorder.get_recorder()
         if rec.recording:
             path = rec.stop()
+            self["recbadge"].setText("")
             self.session.open(
                 MessageBox, _("Aufnahme beendet:\n%s") % path,
                 MessageBox.TYPE_INFO, timeout=5)
         else:
+            self["recbadge"].setText("● REC")
             recorder.ask_recording(
                 self.session, self.streamurl,
                 self.stream_name or "Aufnahme",
                 api=self.api, stream_id=self.stream_id)
+        self._refresh_recbadge()
 
     # --- Timeshift (PAUSE = automatische Aufnahme) ---
 

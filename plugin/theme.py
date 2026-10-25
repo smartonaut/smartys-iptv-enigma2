@@ -6,19 +6,34 @@ fester Pixelwerte skalieren wir alle Layouts proportional zur aktuellen
 Skin-Auflösung (Referenz: 1280x720).
 
 Farbschema identisch zum Web-Panel (panel.smartys.tech).
+
+Aufbau eines Screens (von oben nach unten):
+  Goldkante am linken Rand | Logo + Titel + Untertitel | Goldlinie
+  Karte (Rahmen + Fläche) mit der Liste darin | Statuszeile | Tastenleiste
 """
 
 # Smartys-Branding
-BG = "#0b0e14"        # sehr dunkler Hintergrund
+BG = "#0b0e14"        # sehr dunkler Hintergrund (Fallback ohne Bild)
 PANEL = "#11172a"     # Panel/Karte
-CARD = "#141a2a"      # Listenelement
+CARD = "#141a2a"      # Kartenfläche
+CARD_ALT = "#182034"  # Kartenfläche, zweite Ebene
 BORDER = "#232c42"    # Rahmen
+BORDER_HELL = "#2f3a56"  # Rahmen, betont
 TEXT = "#e8eefc"      # Haupttext
-MUTED = "#6b7a99"     # gedämpfter Text
+MUTED = "#7c8aa8"     # gedämpfter Text
 GOLD = "#ffc94d"      # Akzent/Gold
+GOLD_DUNKEL = "#8a6d2a"  # Gold, abgedunkelt (Linien)
 GREEN = "#6fcf9f"     # ok/aktiv
 RED = "#ff9b9b"       # Fehler
+BLUE = "#6fa8ff"      # Hinweis
 SELECT_BG = "#2a3550" # Auswahl-Hintergrund (Liste)
+
+# Farbtasten der Fernbedienung (für die Tastenleiste unten)
+TASTE_ROT = "#d9534f"
+TASTE_GRUEN = "#5cb85c"
+TASTE_GELB = "#e0b34a"
+TASTE_BLAU = "#5b8fd6"
+TASTE_OK = "#8a93a8"
 
 # Referenz-Auflösung, auf die alle Layouts ausgelegt sind
 REF_W = 1280
@@ -60,122 +75,171 @@ def font(size):
     return int(round(size * w / REF_W))
 
 
-def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
-               footer="", epg=False, picon=False):
-    """Baut einen vollständigen Vollbild-Skin mit Logo, Header, Liste, Status.
-
-    Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
-    list_h: Hoehe der Liste in Referenz-Einheiten (Standard 400).
-    preview: Pig-Fenster (Live-Vorschau) oben rechts einblenden.
-    footer: Tasten-Hinweise unten (z.B. "ROT = Aufnahme").
-    epg: EPG-Label (Jetzt/Danach) für den markierten Sender.
-    picon: Senderlogo-Pixmap (markierter Sender).
-    """
-    if list_h is None:
-        list_h = 400
-    w, h = osd_size()
-    logo_widget = ""
-    if logo:
-        logo_widget = (
-            '<ePixmap pixmap="%s/images/logo.png" position="%d,%d" '
-            'size="%d,%d" alphatest="blend" transparent="1" zPosition="2" />'
-            % (_images_dir(), scale(48), scale_y(42), scale(72), scale_y(72))
-        )
-    header_x = scale(150) if logo else scale(48)
-
-    # Gold-Akzentlinie über der Liste (unter Subtitle)
-    accent = (
-        '<eLabel position="%d,%d" size="%d,%d" backgroundColor="%s" '
-        'zPosition="2" />'
-        % (scale(48), scale_y(158), scale(200), scale_y(3), GOLD)
-    )
-
-    # Bei Vorschau: Liste links schmaler, Pig rechts
-    if preview:
-        list_x = scale(48)
-        list_w = scale(760)
-        pig_widget = (
-            '<widget source="session.VideoPicture" render="Pig" '
-            'position="%d,%d" size="%d,%d" backgroundColor="#000000" '
-            'transparent="1" zPosition="3" />'
-            % (scale(824), scale_y(162), scale(408), scale_y(230))
-        )
-    else:
-        list_x = scale(48)
-        list_w = scale(1184)
-        pig_widget = ""
-
-    # Footer mit Tasten-Hinweisen
-    footer_widget = ""
-    if footer:
-        footer_widget = (
-            '<eLabel text="%s" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="%s" backgroundColor="%s" '
-            'halign="left" valign="center" transparent="1" zPosition="2" />'
-            % (footer, scale(48), scale_y(678), scale(1184), scale_y(30),
-               font(15), MUTED, BG)
-        )
-
-    # Picon (Senderlogo des markierten Senders), links unten.
-    picon_widget = ""
-    if picon:
-        picon_widget = (
-            '<widget name="picon" position="%d,%d" '
-            'size="%d,%d" alphatest="blend" transparent="1" zPosition="2" />'
-            % (scale(48), scale_y(600), scale(90), scale_y(90))
-        )
-
-    # EPG-Label (Jetzt/Danach) unter der Liste
-    epg_widget = ""
-    if epg:
-        epg_x = scale(150) if picon else scale(48)
-        epg_widget = (
-            '<widget name="epg" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="%s" backgroundColor="%s" '
-            'halign="left" valign="center" transparent="1" zPosition="2" />'
-            % (epg_x, scale_y(610), scale(1082), scale_y(52), font(18),
-               TEXT, BG)
-        )
-
-    item_h = scale(38)  # Abstand zwischen Listeneinträgen
-
-    return ("""
-        <screen name="%s" position="0,0" size="%d,%d" backgroundColor="%s" flags="wfNoBorder">
-            <ePixmap pixmap="%s/images/background.png" position="0,0" size="%d,%d" alphatest="off" zPosition="-1" />
-            %s
-            <eLabel text="Smartys IPTV" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" backgroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
-            <widget name="header" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
-            <widget name="subtitle" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="left" valign="center" transparent="1" zPosition="2" />
-            %s
-            %s
-            <widget name="list" position="%d,%d" size="%d,%d" render="Listbox" itemHeight="%d" scrollbarMode="showOnDemand" foregroundColor="%s" foregroundColorSelected="%s" backgroundColor="%s" backgroundColorSelected="%s" transparent="1" zPosition="2" />
-            <widget name="status" position="%d,%d" size="%d,%d" font="Regular;%d" foregroundColor="%s" halign="center" valign="center" transparent="1" zPosition="2" />
-            %s
-            %s
-            %s
-            %s
-        </screen>
-    """ % (
-        name, w, h, BG,
-        _images_dir(), w, h,
-        logo_widget,
-        header_x, scale_y(40), scale(500), scale_y(56), font(28), GOLD, BG,
-        scale(48), scale_y(96), scale(1100), scale_y(34), font(22), TEXT,
-        scale(48), scale_y(132), scale(1100), scale_y(20), font(14), MUTED,
-        accent,
-        pig_widget,
-        list_x, scale_y(162), list_w, scale_y(list_h), item_h,
-        TEXT, GOLD, PANEL, SELECT_BG,
-        scale(48), scale_y(162 + list_h + 12), scale(1184), scale_y(30),
-        font(15), MUTED,
-        picon_widget,
-        epg_widget,
-        footer_widget,
-        extra_widgets,
-    ))
-
-
 def _images_dir():
     """Absoluter Pfad zum images-Verzeichnis (neben den Plugin-Modulen)."""
     import os
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+
+
+def _flaeche(x, y, w, h, farbe, z=1):
+    """Einfarbige Fläche (Rahmen, Karte, Kante)."""
+    return (
+        f'<eLabel position="{scale(x)},{scale_y(y)}" '
+        f'size="{scale(w)},{scale_y(h)}" backgroundColor="{farbe}" '
+        f'zPosition="{z}" />'
+    )
+
+
+def _text(x, y, w, h, inhalt, groesse, farbe, halign="left", z=2, fett=False):
+    """Fester Text (Titel, Hinweise)."""
+    return (
+        f'<eLabel text="{inhalt}" position="{scale(x)},{scale_y(y)}" '
+        f'size="{scale(w)},{scale_y(h)}" font="Regular;{font(groesse)}" '
+        f'foregroundColor="{farbe}" backgroundColor="{BG}" '
+        f'halign="{halign}" valign="center" transparent="1" zPosition="{z}" />'
+    )
+
+
+def _widget(name, x, y, w, h, groesse, farbe, halign="left", z=2):
+    """Vom Code befüllbares Text-Widget."""
+    return (
+        f'<widget name="{name}" position="{scale(x)},{scale_y(y)}" '
+        f'size="{scale(w)},{scale_y(h)}" font="Regular;{font(groesse)}" '
+        f'foregroundColor="{farbe}" backgroundColor="{BG}" '
+        f'halign="{halign}" valign="center" transparent="1" zPosition="{z}" />'
+    )
+
+
+def tastenleiste(eintraege, y=682):
+    """Farbige Tasten-Hinweise: [("ROT", "Aufnahme"), ("GRÜN", "OK"), …].
+
+    Jede Taste bekommt ein farbiges Quadrat mit Kürzel und den Text daneben.
+    Erwartet eine Liste aus (farbe, kuerzel, text); farbe ist ein Farbwert
+    aus diesem Modul oder None (= neutrale Taste).
+    """
+    if not eintraege:
+        return ""
+    teile = []
+    x = 48
+    for farbe, kuerzel, beschriftung in eintraege:
+        farbe = farbe or MUTED
+        breite_kuerzel = max(38, 7 * len(kuerzel))
+        teile.append(_flaeche(x, y + 1, breite_kuerzel, 22, farbe, z=2))
+        teile.append(_text(x, y, breite_kuerzel, 24, kuerzel, 13, "#0b0e14",
+                           halign="center", z=3))
+        text_w = max(60, 8 * len(beschriftung))
+        teile.append(_text(x + breite_kuerzel + 10, y, text_w, 24,
+                           beschriftung, 14, TEXT, z=3))
+        x += breite_kuerzel + 10 + text_w + 26
+    return "".join(teile)
+
+
+def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
+               footer="", epg=False, picon=False, tasten=None, karte=True):
+    """Baut einen vollständigen Vollbild-Skin.
+
+    Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
+    list_h: Hoehe der Liste in Referenz-Einheiten (Standard 400).
+    preview: Pig-Fenster (Live-Vorschau) oben rechts einblenden.
+    footer: Tasten-Hinweise als Text (alt); tasten: farbige Leiste (neu).
+    epg: EPG-Label (Jetzt/Danach) für den markierten Sender.
+    picon: Senderlogo-Pixmap (markierter Sender).
+    karte: Liste auf eine Karte (Rahmen + Fläche) legen.
+    """
+    if list_h is None:
+        # Vielfaches der Zeilenhoehe (48), damit unten kein Eintrag
+        # angeschnitten wird: 9 Zeilen.
+        list_h = 432
+    w, h = osd_size()
+
+    teile = []
+
+    # Hintergrundbild
+    teile.append(
+        f'<ePixmap pixmap="{_images_dir()}/background.png" position="0,0" '
+        f'size="{w},{h}" alphatest="off" zPosition="-1" />'
+    )
+
+    # Goldkante am linken Bildrand — Markenzeichen, gibt dem Bild Halt
+    teile.append(_flaeche(0, 0, 5, 720, GOLD, z=2))
+
+    # Kopfbereich
+    if logo:
+        teile.append(
+            f'<ePixmap pixmap="{_images_dir()}/logo.png" position="{scale(46)},{scale_y(34)}" '
+            f'size="{scale(64)},{scale_y(64)}" alphatest="blend" transparent="1" zPosition="2" />'
+        )
+        titel_x = 126
+    else:
+        titel_x = 48
+    teile.append(_text(titel_x, 28, 520, 44, "Smartys IPTV", 30, GOLD))
+    teile.append(_widget("header", titel_x, 74, 1100, 30, 20, TEXT))
+    teile.append(_widget("subtitle", titel_x, 102, 1100, 22, 14, MUTED))
+    # Goldlinie unter dem Kopf
+    teile.append(_flaeche(titel_x, 128, 148, 3, GOLD, z=2))
+    teile.append(_flaeche(titel_x + 156, 129, 420, 1, BORDER_HELL, z=2))
+
+    # Karte hinter der Liste
+    karte_y = 146
+    if preview:
+        list_x, list_w = 48, 744
+        karte_w = list_w + 24
+    else:
+        list_x, list_w = 48, 1150
+        karte_w = list_w + 24
+
+    if karte:
+        teile.append(_flaeche(list_x - 12, karte_y, karte_w, list_h + 24, BORDER, z=1))
+        teile.append(_flaeche(list_x - 11, karte_y + 1, karte_w - 2, list_h + 22, CARD, z=1))
+
+    # Pig-Vorschau rechts
+    if preview:
+        teile.append(_flaeche(806, karte_y, 426, 254, BORDER, z=1))
+        teile.append(
+            f'<widget source="session.VideoPicture" render="Pig" '
+            f'position="{scale(807)},{scale_y(karte_y + 1)}" '
+            f'size="{scale(424)},{scale_y(252)}" backgroundColor="#000000" '
+            f'transparent="1" zPosition="3" />'
+        )
+
+    # Liste
+    teile.append(
+        f'<widget name="list" position="{scale(list_x)},{scale_y(karte_y + 12)}" '
+        f'size="{scale(list_w)},{scale_y(list_h)}" render="Listbox" '
+        f'itemHeight="{scale_y(48)}" scrollbarMode="showOnDemand" '
+        f'foregroundColor="{TEXT}" foregroundColorSelected="{GOLD}" '
+        f'backgroundColor="{CARD}" backgroundColorSelected="{SELECT_BG}" '
+        f'transparent="1" zPosition="2" />'
+    )
+
+    # Picon (Senderlogo des markierten Senders)
+    if picon:
+        teile.append(
+            f'<widget name="picon" position="{scale(48)},{scale_y(596)}" '
+            f'size="{scale(84)},{scale_y(84)}" alphatest="blend" '
+            f'transparent="1" zPosition="2" />'
+        )
+
+    # EPG-Zeile unter der Liste
+    if epg:
+        epg_x = 146 if picon else 48
+        teile.append(_widget("epg", epg_x, 604, 1086, 52, 17, TEXT))
+
+    # Statuszeile
+    teile.append(_widget("status", 48, karte_y + list_h + 34, 1184, 26, 15, MUTED, halign="center"))
+
+    # Tastenleiste (neu) oder alter Footer-Text
+    if tasten:
+        teile.append(tastenleiste(tasten))
+    elif footer:
+        teile.append(_text(48, 678, 1184, 30, footer, 15, MUTED))
+
+    if extra_widgets:
+        teile.append(extra_widgets)
+
+    return (
+        f'<screen name="{name}" position="0,0" size="{w},{h}" '
+        f'backgroundColor="{BG}" flags="wfNoBorder">'
+        + "".join(teile) +
+        '</screen>'
+    )
