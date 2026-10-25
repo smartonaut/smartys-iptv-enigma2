@@ -13,6 +13,7 @@ import os
 import subprocess
 import datetime
 
+from enigma import iServiceInformation
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
 from Components.ServiceEventTracker import InfoBarBase
@@ -182,7 +183,7 @@ class StreamPlayerScreen(InfoBarBase, Screen):
 
     # --- Playback + EPG ---
 
-    def play_stream(self):
+    def play_stream(self, watchdog=True):
         try:
             ref = eServiceReference(int(self.servicetype), 0, self.streamurl)
             ref.setName(self.streamurl)
@@ -191,6 +192,68 @@ class StreamPlayerScreen(InfoBarBase, Screen):
             pass
         self._load_epg()
         self._show_infobar()
+        if watchdog:
+            self._watchdog_start()
+
+    # ------------------------------------------------------------------
+    # Verbindungswaechter
+    #
+    # Paritaet zum Desktop-Player (dort 3 s Stillstand -> reconnect).
+    # Auf Enigma2 gibt es fuer Live-Stroeme keine verlaessliche Position,
+    # deshalb wird geprueft, ob der Dienst ueberhaupt noch laeuft und ob
+    # der Decoder eine Bildgroesse meldet. Reagiert nur nach einer
+    # Anlaufphase (Pufferaufbau ist kein Stillstand) und nicht waehrend
+    # Timeshift oder Aufnahme.
+    # ------------------------------------------------------------------
+
+    def _watchdog_start(self):
+        self._wd_start = time.time()
+        if not hasattr(self, "_wd_tries"):
+            self._wd_tries = 0
+        if not hasattr(self, "_wd_timer"):
+            self._wd_timer = eTimer()
+            try:
+                self._wd_timer.callback.append(self._watchdog_tick)
+            except Exception:
+                self._wd_timer.timeout.connect(self._watchdog_tick)
+        try:
+            self._wd_timer.start(2000, False)
+        except Exception:
+            pass
+
+    def _watchdog_tick(self):
+        try:
+            if self._wd_tries >= 3:
+                self._wd_timer.stop()
+                return
+            # Anlaufphase: der Puffer muss sich erst fuellen.
+            if time.time() - getattr(self, "_wd_start", 0) < 15:
+                return
+            # Timeshift/Aufnahme laufen ueber eigene Prozesse — nicht dazwischenfunken.
+            if getattr(self, "_timeshift_proc", None) is not None:
+                return
+            svc = self.session.nav.getCurrentService()
+            if svc is None:
+                self._wd_tries += 1
+                self.play_stream(watchdog=False)
+                return
+            # Decoder meldet keine Bildgroesse -> kein Bild trotz Dienst.
+            # Die Konstanten heissen je nach Enigma2-Version anders; fehlen
+            # sie, bleibt nur die Dienst-Pruefung oben (kein Fehler).
+            try:
+                w_key = getattr(iServiceInformation, "iVideoWidth", None)
+                h_key = getattr(iServiceInformation, "iVideoHeight", None)
+                if w_key is not None and h_key is not None:
+                    info = svc.info()
+                    if info is not None:
+                        if (info.getInfo(w_key) == 0
+                                and info.getInfo(h_key) == 0):
+                            self._wd_tries += 1
+                            self.play_stream(watchdog=False)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def _load_epg(self):
         """Lädt short_epg und setzt Titel + Laufzeit-Daten.
