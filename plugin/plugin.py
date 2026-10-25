@@ -13,36 +13,30 @@ from Plugins.Plugin import PluginDescriptor
 from Components.PluginComponent import plugins  # noqa: F401
 
 
-# Die Session wird beim Sessionstart gemerkt. Ein WHERE_MENU-Eintrag wird
-# naemlich OHNE Session aufgerufen (nur mit einem menuid-String) — wer dort
-# blind session.open() aufruft, crasht mit "str object has no attribute open".
-_session = None
-
-
-def _session_holen(args, kwargs):
-    """Findet die Session in beliebiger Aufrufsignatur."""
-    s = kwargs.get("session")
-    if s is not None and hasattr(s, "open"):
-        return s
-    for a in args:
-        if hasattr(a, "open") and hasattr(a, "nav"):
-            return a
-    return _session
-
-
 def main(*args, **kwargs):
     from .mainmenu import MainMenuScreen
-    session = _session_holen(args, kwargs)
+
+    # WICHTIG: Bei WHERE_MENU ruft Enigma2 diesen Einstiegspunkt bereits beim
+    # AUFBAU des Hauptmenues auf, um die Beschreibung abzufragen — dann kommt
+    # nur ein menuid-String, keine Session. Wer hier blind einen Screen
+    # oeffnet, crasht mit "Modal open are allowed only from a screen which is
+    # modal". Beim echten Klick uebergibt Enigma2 dagegen die Session.
+    session = kwargs.get("session")
+    if session is None or not hasattr(session, "open"):
+        session = None
+        for a in args:
+            if hasattr(a, "open") and hasattr(a, "nav"):
+                session = a
+                break
+
     if session is None:
-        return
+        return "IPTV-Player fuer Smartys (Live-TV, Filme, Serien)"
+
     session.open(MainMenuScreen)
 
 
 def sessionstart(reason=0, session=None, **kwargs):
-    """Beim Start die Session merken und den Timer-Scheduler initialisieren."""
-    global _session
-    if session is not None:
-        _session = session
+    """Beim Start den Timer-Scheduler initialisieren (persistierte Timer laden)."""
     if reason == 0:
         try:
             from . import recorder
