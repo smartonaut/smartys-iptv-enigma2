@@ -41,6 +41,65 @@ Download: `https://player.smartys.tech/download/enigma2`
 
 ---
 
+## [0.4.0] — 2026-10-25 (Beta)
+
+Download: `https://player.smartys.tech/download/enigma2`
+
+### Neu
+
+- **Sortierung der Senderliste (BLAU)**: `original` → `az` → `za` →
+  `fav_first` im Kreis, gespeichert als `sort_mode`. Der Cursor bleibt auf
+  demselben Sender stehen, Favoriten-Sternchen werden beim Sortieren
+  ignoriert.
+- **Gruppen ausblenden (GELB)** in der Kategorienliste, BLAU holt alle
+  zurück. Gilt **getrennt für Live-TV, Filme und Serien** — ausgeblendete
+  Gruppen hängen als `- Name` am Listenende, damit man sie wiederfindet.
+- **Aufnahmeverzeichnis frei wählbar** (Einstellungen): Ordner-Browser mit
+  Schreibtest und Anzeige des freien Platzes. BLAU legt einen neuen Ordner an.
+- **EPG-Übersicht aller Sender** (Timer-Aufnahmen → GELB): flache Liste
+  `Zeit · Sender · Sendung`, OK merkt vor, BLAU merkt **wöchentlich** vor,
+  GRÜN/GELB blättert durch die Tage. Die Daten kommen aus dem EPG-Cache, ohne
+  Netzabruf — so ist die Liste sofort da.
+- **Wiederkehrende Aufnahmen**: täglich, werktags (Mo–Fr) oder wöchentlich;
+  der Scheduler legt nach dem Lauf selbst den nächsten Termin an.
+
+### Behoben
+
+- **Filme blieben schwarz**: Die Wiedergabe forderte hart `.mp4` an, auch
+  wenn der Film als MKV vorliegt. Der Server antwortet dann mit HTTP 551.
+  Die echte `container_extension` aus der API wird jetzt durchgereicht.
+- **Timer-Aufnahmen liefen nur bei geöffnetem Plugin**: Der Scheduler hängt
+  jetzt an Autostart und Sessionstart. Verifiziert: Box neu gestartet,
+  Plugin nie geöffnet, Aufnahme lief (40 MB). Läuft damit auch, während
+  normales Sat-TV über den Tuner läuft.
+- **Ausblenden wirkte in allen Bereichen gleichzeitig**: Ein gemeinsamer
+  Config-Schlüssel führte dazu, dass 99 ausgeblendete Live-Gruppen auch die
+  Film- und Serienliste leerten. Jetzt `hidden_categories_live|vod|series`
+  mit Migration des Altbestands.
+
+### Warnung vor Aufnahmen
+
+Vor jeder Aufnahme erscheint ein Hinweis zur Verbindungszahl der Line
+(`max_connections` aus der API). Bei einer Verbindung: „Während der Aufnahme
+belegt sie diese — du kannst in dieser Zeit keinen anderen IPTV-Sender
+schauen." Bei mehreren Verbindungen passt sich der Text an. Der Wert wird
+einmal geholt und behalten, weil der Server wiederholte Abfragen drosselt.
+
+### EPG-Cache
+
+Der Rytec-Cache umfasst jetzt **549 Sender mit rund 127.000 Sendungen**
+(sechs Länderquellen: DE, AT, CH, NL, UK, 6 MB, etwa 7 Tage voraus). Er wird
+beim Plugin-Start im Hintergrund aufgebaut. Der Namensabgleich arbeitet nur
+an Wortgrenzen — lieber kein Treffer als eine falsche Sendung.
+
+### Technik
+
+- Diagnose-Log `/tmp/smartysiptv_timer.log` für den Aufnahme-Scheduler.
+  Bisher wurden Fehler dort still geschluckt, ein Fehlschlag war unsichtbar.
+- Neue Module: `epgoverview.py`, `recdir.py`.
+
+---
+
 ## [0.3.0] — 2026-10-12 (Beta)
 
 Download: `https://player.smartys.tech/download/enigma2`
