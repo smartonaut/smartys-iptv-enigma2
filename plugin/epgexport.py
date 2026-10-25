@@ -174,14 +174,6 @@ def exportiere(pfad=None):
                     ["IBDT", (_refstr, -1, -1, 1440)]) or []
             except Exception as e:
                 _log("lookupEvent-Fehler: %r" % (e,))
-            # Erste drei Sender mit dem exakten String protokollieren, der
-            # an lookupEvent geht — die Probe mit hartkodiertem ARD-String
-            # liefert 35 Events, die Schleife 0. Der Unterschied kann nur
-            # hier liegen.
-            if anzahl == 0 and len(ergebnis) == 0 and _refstr.count(":") > 5:
-                if not getattr(exportiere, "_probe_gezeigt", False):
-                    exportiere._probe_gezeigt = True
-                    _log("Vergleich: ref=%r -> %d Events" % (_refstr, len(events)))
             # Kein Fallback mehr: lookupEvent ist der dokumentierte Weg und
             # liefert auf openATV nachweislich Events (Probe: 35 fuer ARD).
             # search() sucht nur nach Titel/CRID und braucht an Position 2
@@ -223,12 +215,6 @@ def exportiere(pfad=None):
                 ergebnis[key] = zeilen
                 anzahl += len(zeilen)
         _log("%d Services, %d Sendungen" % (len(refs), anzahl))
-        # Diagnose: liefert der Cache grundsaetzlich etwas?
-        try:
-            probe = cache.search(("R", ".")) or []
-            _log("Cache-Probe (Titelsuche '.'): %d Treffer" % len(probe))
-        except Exception as e:
-            _log("Cache-Probe fehlgeschlagen: %r" % (e,))
     except Exception as e:
         _log("FEHLER: %r" % (e,))
         return -1
