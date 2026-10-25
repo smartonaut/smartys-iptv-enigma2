@@ -247,6 +247,113 @@ def ready():
     return _ready
 
 
+# --------------------------------------------------------------------------
+# Enigma2-eigenes EPG (DVB vom Tuner)
+#
+# Die Boxen haengen an Kabel oder Satellit und haben das EPG der empfangbaren
+# Sender direkt im Speicher (`eEPGCache`). Das ist die bessere Quelle fuer
+# alles, was ueber den Tuner laeuft: aktuell, vollstaendig, ohne Download —
+# und es deckt genau die Sender ab, die im Rytec-Bestand fehlen (SAT.1,
+# ORF, SRF, RTLZWEI ...).
+#
+# IPTV-Sender haben keine DVB-ServiceReference, deshalb wird ueber den NAMEN
+# gematcht: der Anzeigename des Tuner-Senders gegen den IPTV-Namen.
+# --------------------------------------------------------------------------
+
+_ENIGMA_CACHE = {"gefragt": False, "namen": {}}
+
+
+def _enigma_namen():
+    """Alle Sender mit EPG aus dem Enigma2-Cache: {normalisiert: (ref, name)}.
+
+    Wird einmal aufgebaut und behalten. Ohne Enigma2-Kontext (Testskript per
+    SSH) wirft der Import — dann bleibt das Dict leer und alles laeuft wie
+    bisher ueber Rytec.
+    """
+    if _ENIGMA_CACHE["gefragt"]:
+        return _ENIGMA_CACHE["namen"]
+    _ENIGMA_CACHE["gefragt"] = True
+    namen = {}
+    try:
+        from enigma import eEPGCache, eServiceReference
+        from ServiceReference import ServiceReference as SR
+
+        cache = eEPGCache.getInstance()
+        # Alle Service-Referenzen, die der EPG-Cache kennt
+        refs = cache.search(("R", "I")) or []
+        for ref in refs:
+            try:
+                text = str(ref) if not isinstance(ref, (list, tuple)) else str(ref[0])
+                if not text:
+                    continue
+                r = eServiceReference(text)
+                name = SR(r).getServiceName()
+                if not name:
+                    continue
+                namen[normalize(name)] = text
+            except Exception:
+                continue
+        print("[SmartysIPTV] Enigma2-EPG: %d Sender" % len(namen))
+    except Exception as e:
+        print("[SmartysIPTV] Enigma2-EPG nicht verfuegbar: %r" % (e,))
+    _ENIGMA_CACHE["namen"] = namen
+    return namen
+
+
+def enigma_epg(channel_name, ab_ts=None, stunden=24):
+    """Sendungen eines Senders aus dem Enigma2-EPG (Tuner).
+
+    Liefert dieselbe Struktur wie alle_sendungen(): [(start, ende, titel)].
+    Leer, wenn der Sender nicht ueber den Tuner empfangbar ist.
+    """
+    try:
+        from enigma import eEPGCache, eServiceReference
+        from ServiceReference import ServiceReference as SR
+    except Exception:
+        return []
+
+    eintraege = _enigma_namen()
+    if not eintraege:
+        return []
+    key = normalize(channel_name)
+    if not key:
+        return []
+
+    # Gleiche Stufen wie _finde(), nur auf der Enigma2-Namensliste
+    treffer = eintraege.get(key)
+    if not treffer:
+        kompakt = key.replace(" ", "")
+        for k, v in eintraege.items():
+            if k.replace(" ", "") == kompakt:
+                treffer = v
+                break
+    if not treffer:
+        for k, v in eintraege.items():
+            if len(k) >= 5 and (key.endswith(" " + k) or k.endswith(" " + key)):
+                treffer = v
+                break
+    if not treffer:
+        return []
+
+    if ab_ts is None:
+        ab_ts = time.time()
+    bis = ab_ts + stunden * 3600
+    ergebnis = []
+    try:
+        cache = eEPGCache.getInstance()
+        events = cache.lookupService(eServiceReference(treffer)) or []
+        for ev in events:
+            start = ev.getBeginTime()
+            ende = ev.getDuration() + start
+            if ende <= ab_ts or start >= bis:
+                continue
+            titel = ev.getEventName() or ""
+            ergebnis.append((start, ende, titel))
+    except Exception:
+        return []
+    return ergebnis
+
+
 def _finde(channel_name):
     """Passende Eintraege im Index finden — in drei Stufen.
 

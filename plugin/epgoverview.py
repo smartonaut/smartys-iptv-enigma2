@@ -174,13 +174,20 @@ class EpgOverviewScreen(Screen):
         gaengigen Sender ab. Was dort steht, ist sofort da — das Netz braucht
         es nur fuer Sender, die der Cache nicht kennt.
         """
+        ab, bis = self._fenster()
+        stunden = (bis - ab) / 3600.0
+        treffer = []
         try:
             from . import epgbackup
-            epgbackup.ensure_loaded()
-            ab, bis = self._fenster()
-            treffer = epgbackup.alle_sendungen(sender.get("name", ""),
-                                              ab_ts=ab,
-                                              stunden=(bis - ab) / 3600.0)
+            # Zuerst das Enigma2-EPG vom Tuner: das deckt die Sender ab, die
+            # ueber Kabel/Satellit empfangbar sind, und ist immer aktuell.
+            treffer = epgbackup.enigma_epg(sender.get("name", ""),
+                                           ab_ts=ab, stunden=stunden)
+            # Sonst der Rytec-Cache (deckt reine IPTV-Sender ab)
+            if not treffer:
+                epgbackup.ensure_loaded()
+                treffer = epgbackup.alle_sendungen(sender.get("name", ""),
+                                                   ab_ts=ab, stunden=stunden)
         except Exception:
             return []
         zeilen = []

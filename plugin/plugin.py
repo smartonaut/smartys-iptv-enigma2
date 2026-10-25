@@ -66,6 +66,14 @@ def sessionstart(reason=0, session=None, **kwargs):
             epgbackup.ensure_loaded()
         except Exception:
             pass
+        # Eigenes EPG exportieren, damit der Server es an die anderen Boxen
+        # verteilen kann. Nur auf Boxen mit Tuner sinnvoll — ohne Anschluss
+        # ist die Datei leer und der Upload schlaegt still fehl.
+        try:
+            from . import epgexport
+            epgexport.exportiere_thread()
+        except Exception:
+            pass
 
 
 def Plugins(**kwargs):
