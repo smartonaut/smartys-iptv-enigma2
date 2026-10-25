@@ -22,10 +22,58 @@ try:
 except Exception:  # pragma: no cover
     ET = None
 
-EPG_SOURCES = (
-    "http://epg.vuplus-community.net/rytecDE_Basic.xz",
-    "http://epg.vuplus-community.net/rytecDE_Common.xz",
-)
+# Rytec-Quellen nach Land. Geladen wird nur, was gebraucht wird: die
+# Laenderliste kommt aus den SICHTBAREN Gruppen (ausgeblendete Gruppen
+# liefern kein EPG, ihre Sender werden nie angezeigt). Ohne Filter zog
+# eine deutsche Box auch UK/NL/CH mit — mehrere MB fuer nichts.
+# Belgien gibt es bei Rytec nicht (rytecBE_Basic -> HTTP 404); flaemische
+# Sender stecken teilweise in der NL-Liste.
+EPG_SOURCES = {
+    "DE": ("http://epg.vuplus-community.net/rytecDE_Basic.xz",
+           "http://epg.vuplus-community.net/rytecDE_Common.xz"),
+    "AT": ("http://epg.vuplus-community.net/rytecAT_Basic.xz",),
+    "CH": ("http://epg.vuplus-community.net/rytecCH_Basic.xz",),
+    "NL": ("http://epg.vuplus-community.net/rytecNL_Basic.xz",),
+    "BE": ("http://epg.vuplus-community.net/rytecNL_Basic.xz",),
+    "UK": ("http://epg.vuplus-community.net/rytecUK_Basic.xz",),
+}
+
+# Gesetzt vom Plugin, sobald die sichtbaren Sender bekannt sind (Ländernamen
+# aus den Sendernamen, z. B. "DE - Das Erste HD" -> DE). None = noch nicht
+# bekannt, dann werden alle Quellen geladen.
+_LAENDER = {"aktiv": None}
+
+
+def laender_aus_sendern(namen):
+    """Laenderkennungen aus Sendernamen ziehen ("DE - Das Erste HD" -> DE).
+
+    Die IPTV-Listen praefixen fast jeden Sender mit dem Land. Was kein
+    bekanntes Praefix hat, zaehlt nicht — dann wird fuer dieses Land
+    nichts geladen, was bei reinen DE-Listen richtig ist.
+    """
+    gefunden = set()
+    for name in namen or ():
+        text = (name or "").strip().upper()
+        if len(text) >= 3 and text[2] in "-| ":
+            code = text[:2]
+            if code in EPG_SOURCES:
+                gefunden.add(code)
+    return gefunden
+
+
+def setze_laender(laender):
+    """Merkt sich, fuer welche Laender EPG gebraucht wird.
+
+    Wird beim Kategorien-Laden aufgerufen, sobald die sichtbaren Sender
+    bekannt sind. Ein leerer Treffer laesst die Einstellung unveraendert —
+    sonst wuerde ein einzelner fehlgeschlagener Abruf das EPG abschalten.
+    """
+    laender = [str(l).upper() for l in (laender or []) if l]
+    laender = [l for l in laender if l in EPG_SOURCES]
+    if laender:
+        _LAENDER["aktiv"] = tuple(sorted(set(laender)))
+
+
 CACHE_FILE = "/etc/enigma2/smartysiptv_epg.json"
 CACHE_TTL = 24 * 3600
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -98,11 +146,24 @@ def _parse_xz_stream(stream):
     return result
 
 
+def _quellen():
+    """URLs der Quellen, die fuer die aktiven Laender gebraucht werden."""
+    laender = _LAENDER["aktiv"]
+    if not laender:
+        laender = tuple(EPG_SOURCES.keys())
+    urls = []
+    for land in laender:
+        for url in EPG_SOURCES.get(land, ()):
+            if url not in urls:      # NL deckt auch BE ab — nicht doppelt laden
+                urls.append(url)
+    return urls
+
+
 def _download_and_parse(path):
-    """Laedt alle Quellen (Streaming-Dekompression) und baut den Index."""
+    """Laedt die benoetigten Quellen (Streaming-Dekompression), baut den Index."""
     merged = {}
     tmp = path + ".tmp"
-    for url in EPG_SOURCES:
+    for url in _quellen():
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA})
             with urllib.request.urlopen(req, timeout=45) as r:
@@ -110,7 +171,11 @@ def _download_and_parse(path):
             with open(tmp, "wb") as f:
                 f.write(data)
             with lzma.open(tmp, "rb") as stream:
-                merged.update(_parse_xz_stream(stream))
+                neu = _parse_xz_stream(stream)
+            for name, zeilen in neu.items():
+                alt_v = merged.get(name)
+                if alt_v is None or len(zeilen) > len(alt_v):
+                    merged[name] = zeilen
         except Exception as e:
             print("[SmartysIPTV] EPG-Quelle fehlgeschlagen %s: %r" % (url, e))
         finally:
@@ -199,8 +264,14 @@ def _finde(channel_name):
     for k, v in _index.items():
         if k.replace(" ", "") == kompakt:
             return v
+    # Stufe 3 nur an Wortgrenzen: "das erste" passt auf "erste", aber
+    # "rtlzwei" darf NICHT auf "rtl" passen und "een" nicht irgendwo
+    # mitten in einem fremden Namen. Ein falscher Treffer ist schlimmer
+    # als keiner — der Nutzer merkt es erst bei der Aufnahme.
     for k, v in _index.items():
-        if len(k) >= 4 and (k in key or key in k):
+        if len(k) < 5:
+            continue
+        if key.endswith(" " + k) or k.endswith(" " + key):
             return v
     return None
 

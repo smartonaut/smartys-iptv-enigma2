@@ -48,11 +48,22 @@ def _menu_container(menuid="", **kwargs):
 
 
 def sessionstart(reason=0, session=None, **kwargs):
-    """Beim Start den Timer-Scheduler initialisieren (persistierte Timer laden)."""
+    """Beim Start Timer-Scheduler und EPG-Cache initialisieren.
+
+    Der EPG-Cache wurde bisher erst beim Oeffnen eines EPG-Screens gebaut —
+    nach einem Loeschen blieb er leer, und die EPG-Uebersicht hatte nichts
+    anzuzeigen. Er wird jetzt im Hintergrund-Thread beim Start gefuellt
+    (dauert etwa eine Minute, blockiert aber nichts).
+    """
     if reason == 0:
         try:
             from . import recorder
             recorder.get_scheduler()
+        except Exception:
+            pass
+        try:
+            from . import epgbackup
+            epgbackup.ensure_loaded()
         except Exception:
             pass
 
