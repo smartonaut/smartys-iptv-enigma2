@@ -103,9 +103,24 @@ class LiveListScreen(BaseListScreen):
 
     def _fetch(self):
         streams = self.api.live_streams(self.category_id)
+        # Manche Panels liefern Kategorie-Trenner als Pseudo-Sender mit
+        # ("##### BELGIUM HD #####"). Sie haben keinen spielbaren Stream und
+        # stehen als erste Zeile in der Liste — dann bleibt die Vorschau
+        # schwarz und das Logo leer. Also rausfiltern.
+        echte = []
+        for s in streams:
+            name = (s.get("name") or "").strip()
+            if not name or name.startswith("#####") or name.startswith("----"):
+                continue
+            try:
+                if int(s.get("stream_id") or 0) <= 0:
+                    continue
+            except Exception:
+                continue
+            echte.append(s)
         return (
-            [(s.get("name", "?"), s) for s in streams],
-            _("%d Sender") % len(streams),
+            [(s.get("name", "?"), s) for s in echte],
+            _("%d Sender") % len(echte),
         )
 
     def _on_select(self, ch):
@@ -141,7 +156,10 @@ class LiveListScreen(BaseListScreen):
         if not ch:
             return
         url = self.api.creds.stream_url(ch.get("stream_id"), "ts")
-        if vlc_player.play_service(self.session, url):
+        # GStreamer (4097) fuer das Vorschaufenster: exteplayer3 uebernimmt
+        # den Decoder im Vollbild und rendert nicht in ein Pig.
+        if vlc_player.play_service(
+                self.session, url, servicetype=vlc_player.SERVICE_EXTPLAYER3):
             self._preview_started = True
 
     def _update_picon(self):

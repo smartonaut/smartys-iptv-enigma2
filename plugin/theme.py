@@ -195,11 +195,14 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
     # Pig-Vorschau rechts
     if preview:
         teile.append(_flaeche(806, karte_y, 426, 254, BORDER, z=1))
+        # Video-Vorschau: Source direkt, ohne render, mit alphatest — so
+        # wird der Bereich aus der OSD-Ebene ausgespart und das laufende
+        # Video scheint durch.
         teile.append(
-            f'<widget source="session.VideoPicture" render="Pig" '
-            f'position="{scale(807)},{scale_y(karte_y + 1)}" '
-            f'size="{scale(424)},{scale_y(252)}" backgroundColor="#000000" '
-            f'transparent="1" zPosition="3" />'
+            f'<widget source="session.VideoPicture" '
+            f'position="{scale(808)},{scale_y(karte_y + 2)}" '
+            f'size="{scale(422)},{scale_y(250)}" '
+            f'zPosition="5" alphatest="blend" />'
         )
 
     # Liste
@@ -220,10 +223,11 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
             f'transparent="1" zPosition="2" />'
         )
 
-    # EPG-Zeile unter der Liste
+    # EPG-Zeile unter der Liste — bewusst gross und in Gold, damit sie
+    # beim Durchscrollen sofort ins Auge faellt.
     if epg:
         epg_x = 146 if picon else 48
-        teile.append(_widget("epg", epg_x, 604, 1086, 52, 17, TEXT))
+        teile.append(_widget("epg", epg_x, 596, 1086, 56, 20, GOLD))
 
     # Statuszeile
     teile.append(_widget("status", 48, karte_y + list_h + 34, 1184, 26, 15, MUTED, halign="center"))

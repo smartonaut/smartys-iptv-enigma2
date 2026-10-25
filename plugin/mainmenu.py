@@ -36,8 +36,12 @@ class MainMenuScreen(Screen):
     def _refresh(self):
         paired = bool(self.cfg.providers())
         locked = self.cfg.is_locked()
-        entries = [
-            (_("▶ Im Demo-Modus starten"), self.open_demo),
+        entries = []
+        # Der Demo-Einstieg ist nur für Nutzer OHNE Line sinnvoll. Mit
+        # hinterlegter Line wäre er ein irreführender Umweg.
+        if not paired:
+            entries.append((_("▶ Im Demo-Modus starten"), self.open_demo))
+        entries += [
             (_("Live-TV"), self.open_live),
             (_("Filme (VOD)"), self.open_vod),
             (_("Serien"), self.open_series),
