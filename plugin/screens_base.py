@@ -60,6 +60,7 @@ class BaseListScreen(Screen):
                 "ok": self.on_select,
                 "cancel": self.close,
                 "red": self.on_red,
+                "yellow": self.on_yellow,
                 "info": self.on_info,
                 "epg": self.on_info,
             },
@@ -86,6 +87,11 @@ class BaseListScreen(Screen):
     # --- optional: ROT-Taste (Aufnahme) — Standard: ignorieren ---
 
     def on_red(self):
+        pass
+
+    # --- optional: GELB-Taste (Favorit) — Standard: ignorieren ---
+
+    def on_yellow(self):
         pass
 
     # --- optional: EPG/INFO-Taste — Standard: ignorieren ---

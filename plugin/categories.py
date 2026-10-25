@@ -69,6 +69,14 @@ class CategoryListScreen(Screen):
             return
         # "Alle" als erster Eintrag (category_id=None zeigt alles)
         entries = [(_("Alle"), None)]
+        # Favoriten ganz oben, aber nur wenn es welche gibt und es die
+        # Live-TV-Ebene ist (bei Filmen/Serien waere der Eintrag sinnlos).
+        try:
+            favs = self.cfg.favorites()
+        except Exception:
+            favs = []
+        if favs and self.category_action == "live_categories":
+            entries.append((_("Favoriten (%d)") % len(favs), "__fav__"))
         for c in cats:
             entries.append((c.get("category_name", "?"), c.get("category_id")))
         self["list"].setList(entries)
@@ -79,6 +87,11 @@ class CategoryListScreen(Screen):
         if not sel:
             return
         category_id = sel[1]
+        if category_id == "__fav__":
+            self.session.open(
+                self.list_screen, self.cfg, "__fav__",
+                _("Favoriten"), _("gemerkte Sender"))
+            return
         self.session.open(
             self.list_screen, self.cfg, category_id,
             self.list_header, self.list_subtitle)

@@ -32,6 +32,10 @@ DEFAULTS = {
     "confirm_switch": True,
     "preview": True,
     "show_in_main_menu": False,
+    # Favoriten: Liste von stream_ids (als String). Die App arbeitet mit
+    # genau einer Line (providers[0]); bei mehreren Lines koennen sich die
+    # IDs ueberschneiden.
+    "favorites": [],
 }
 
 _PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
@@ -105,6 +109,27 @@ class Config(object):
         pw = "".join(secrets.choice(_PW_CHARS) for _ in range(12))
         self.set("pairing_pw", pw)
         return pw
+
+    # ============================ FAVORITEN ============================
+
+    def favorites(self):
+        return [str(x) for x in (self.get("favorites") or [])]
+
+    def is_favorite(self, stream_id):
+        return str(stream_id) in self.favorites()
+
+    def toggle_favorite(self, stream_id):
+        """Favorit an/aus. Rueckgabe: True, wenn jetzt Favorit."""
+        sid = str(stream_id)
+        favs = self.favorites()
+        if sid in favs:
+            favs.remove(sid)
+            neu = False
+        else:
+            favs.append(sid)
+            neu = True
+        self.set("favorites", favs)
+        return neu
 
     # ====================== VERSCHLÜSSELTE PROVIDER ======================
 

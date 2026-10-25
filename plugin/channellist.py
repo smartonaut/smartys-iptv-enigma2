@@ -42,7 +42,13 @@ class LiveListScreen(BaseListScreen):
     preview = True
     epg = True
     picon = True
-    footer = "OK = Abspielen   ·   ROT = Aufnahme   ·   EPG = Sendeplan   ·   EXIT = Zurück"
+    from . import theme as _theme
+    tasten = [
+        (_theme.TASTE_OK, "OK", "Abspielen"),
+        (_theme.TASTE_ROT, "ROT", "Aufnahme"),
+        (_theme.TASTE_GELB, "GELB", "Favorit"),
+        (None, "EXIT", "Zurück"),
+    ]
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
@@ -52,6 +58,11 @@ class LiveListScreen(BaseListScreen):
             self.preview = bool(Config().load().get("preview", True))
         except Exception:
             self.preview = True
+        # "__fav__" ist kein echtes Kategorie-ID, sondern der Wunsch nach
+        # einer reinen Favoritenliste (kommt aus categories.py).
+        self.favorites_only = (category_id == "__fav__")
+        if self.favorites_only:
+            category_id = None
         super().__init__(session, cfg, category_id, header_text, subtitle_text)
 
         self["epg"] = Label()
@@ -84,6 +95,29 @@ class LiveListScreen(BaseListScreen):
         # nach dem Close auf zerstörte Widgets zugreifen).
         self._preview_started = False
         self.onClose.append(self._on_close)
+
+    def on_yellow(self):
+        """GELB: markierten Sender als Favorit merken oder entfernen."""
+        sel = self["list"].getCurrent()
+        if not sel or not sel[1]:
+            return
+        sid = sel[1].get("stream_id")
+        if sid is None:
+            return
+        neu = self.cfg.toggle_favorite(sid)
+        name = sel[1].get("name", "?")
+        self["status"].setText(
+            _("%s ist jetzt Favorit") % name if neu
+            else _("%s ist kein Favorit mehr") % name)
+        # Liste neu aufbauen, damit das Sternchen sofort erscheint.
+        self._reload()
+
+    def _reload(self):
+        try:
+            items, status = self._fetch()
+        except Exception:
+            return
+        self["list"].setList(items)
 
     def _on_close(self):
         for t in (self._preview_timer, self._epg_timer, self._picon_timer):
@@ -118,10 +152,21 @@ class LiveListScreen(BaseListScreen):
             except Exception:
                 continue
             echte.append(s)
-        return (
-            [(s.get("name", "?"), s) for s in echte],
-            _("%d Sender") % len(echte),
-        )
+        favs = self.cfg.favorites()
+        if self.favorites_only:
+            # Auf "echte" filtern, nicht auf "streams": daraus wird die Liste
+            # gebaut, ein Filter auf streams haette keine Wirkung.
+            favs_set = set(favs)
+            echte = [s for s in echte
+                     if str(s.get("stream_id")) in favs_set]
+        eintraege = []
+        for s in echte:
+            name = s.get("name", "?")
+            if str(s.get("stream_id")) in favs:
+                # Kein Emoji: die Box rendert sie als leeres Kaestchen.
+                name = "* " + name
+            eintraege.append((name, s))
+        return (eintraege, _("%d Sender") % len(echte))
 
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
