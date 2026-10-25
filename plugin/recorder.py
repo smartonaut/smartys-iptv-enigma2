@@ -134,6 +134,29 @@ def get_recorder():
     return _recorder
 
 
+# Diagnose-Log. Ohne das ist im Fehlerfall nicht zu erkennen, ob der
+# Autostart griff oder der Timer stumm gestorben ist — alle Ausnahmen
+# werden hier absichtlich geschluckt, damit die Box nicht stehenbleibt.
+LOG_FILE = "/tmp/smartysiptv_timer.log"
+
+
+def _log(text):
+    try:
+        import datetime
+        zeile = "%s  %s\n" % (
+            datetime.datetime.now().strftime("%d.%m %H:%M:%S"), text)
+        with open(LOG_FILE, "a") as f:
+            f.write(zeile)
+        # Nicht unbegrenzt wachsen lassen
+        if os.path.getsize(LOG_FILE) > 200000:
+            with open(LOG_FILE, "r") as f:
+                rest = f.readlines()[-1000:]
+            with open(LOG_FILE, "w") as f:
+                f.writelines(rest)
+    except Exception:
+        pass
+
+
 TIMERS_FILE = "/etc/enigma2/smartysiptv_timers.json"
 
 
@@ -156,6 +179,7 @@ class TimerScheduler(object):
                 self._timer.timeout.connect(self._check)
         # Timer sofort aufnehmen, falls schon etwas fällig ist.
         self._ensure_running()
+        self._log_start()
 
     def _load(self):
         now = int(time.time())
@@ -187,6 +211,19 @@ class TimerScheduler(object):
                 json.dump(data, f)
         except Exception:
             pass
+
+    def _log_start(self):
+        """Beim Sessionstart protokollieren, was der Scheduler vorhat."""
+        if not self.timers:
+            _log("Scheduler gestartet, keine Timer")
+            return
+        _log("Scheduler gestartet, %d Timer:" % len(self.timers))
+        for t in self.timers:
+            import datetime
+            _log("  %s  %s – %s" % (
+                t["name"],
+                datetime.datetime.fromtimestamp(t["start"]).strftime("%d.%m %H:%M"),
+                datetime.datetime.fromtimestamp(t["end"]).strftime("%H:%M")))
 
     def schedule(self, url, name, start_ts, end_ts):
         """Plant eine Aufnahme (Unix-Timestamps). Liefert die Timer-ID (dict)."""
@@ -223,6 +260,7 @@ class TimerScheduler(object):
             if t["proc"] is None and now >= t["end"]:
                 t["done"] = True
                 changed = True
+                _log("verpasst (Fenster vorbei): %s" % t["name"])
                 continue
             # Start fällig?
             if t["proc"] is None and now >= t["start"] and now < t["end"]:
@@ -242,8 +280,10 @@ class TimerScheduler(object):
                     t["proc"] = subprocess.Popen(
                         cmd, stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
-                except Exception:
+                    _log("START %s -> %s" % (t["name"], path))
+                except Exception as e:
                     t["proc"] = None
+                    _log("START FEHLGESCHLAGEN %s: %s" % (t["name"], e))
                 changed = True
             # Stop fällig?
             elif t["proc"] is not None and now >= t["end"]:
@@ -259,6 +299,7 @@ class TimerScheduler(object):
                 t["proc"] = None
                 t["done"] = True
                 changed = True
+                _log("STOPP %s" % t["name"])
         if changed:
             self._save()
             self._ensure_running()

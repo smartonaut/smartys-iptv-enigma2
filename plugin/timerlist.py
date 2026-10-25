@@ -19,7 +19,9 @@ class TimerListScreen(Screen):
     def __init__(self, session):
         self.skin = theme.build_skin(
             "SmartysTimers",
-            tasten=[(theme.TASTE_OK, "OK", "Abbrechen"), (None, "EXIT", "Zurück")])
+            tasten=[(theme.TASTE_OK, "OK", "Abbrechen"),
+                    (theme.TASTE_GELB, "GELB", "EPG-Übersicht"),
+                    (None, "EXIT", "Zurück")])
         Screen.__init__(self, session)
         self.session = session
 
@@ -34,9 +36,31 @@ class TimerListScreen(Screen):
                 "ok": self._cancel,
                 "cancel": self.close,
                 "red": self._cancel,
+                "yellow": self._epg_uebersicht,
             },
         )
         self.onLayoutFinish.append(self._refresh)
+
+    def _epg_uebersicht(self):
+        """GELB: EPG aller Sender als Liste — dort direkt vormerken."""
+        from .config import Config
+        from .api import Credentials, XtreamApi
+        from .epgoverview import EpgOverviewScreen
+
+        cfg = Config().load()
+        prov = cfg.providers()
+        if not prov:
+            self.session.open(
+                MessageBox, _("Keine Line eingerichtet."),
+                MessageBox.TYPE_INFO, timeout=4)
+            return
+        p = prov[0]
+        api = XtreamApi(Credentials(p["server_url"], p["username"],
+                                    p["password"]))
+        # Nach dem Schliessen der Uebersicht die Timer-Liste auffrischen —
+        # dort koennen neue Eintraege dazugekommen sein.
+        self.session.openWithCallback(lambda _x: self._refresh(),
+                                       EpgOverviewScreen, api, cfg)
 
     def _refresh(self):
         pending = recorder.get_scheduler().pending()
