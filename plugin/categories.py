@@ -24,11 +24,21 @@ class CategoryListScreen(Screen):
 
     screen_name = "SmartysCategories"
 
+    # GELB blendet die markierte Gruppe aus, BLAU holt alle zurueck.
+    # Ausgeblendete Gruppen landen als Liste von Namen in der Config, nicht
+    # als IDs: manche Panels vergeben die IDs bei jedem Abruf neu.
+    tasten = [
+        (theme.TASTE_OK, "OK", "Öffnen"),
+        (theme.TASTE_GELB, "GELB", "Ausblenden"),
+        (theme.TASTE_BLAU, "BLAU", "Alle zeigen"),
+        (None, "EXIT", "Zurück"),
+    ]
+
     def __init__(self, session, cfg, category_action, list_screen,
                  list_header, list_subtitle):
         self.skin = theme.build_skin(
             self.screen_name,
-            tasten=[(theme.TASTE_OK, "OK", "Öffnen"), (None, "EXIT", "Zurück")])
+            tasten=getattr(self, "tasten", None))
         Screen.__init__(self, session)
         self.session = session
         self.cfg = cfg
@@ -39,6 +49,7 @@ class CategoryListScreen(Screen):
 
         self.api = self._build_api()
         self.categories = []
+        self._alle = []
 
         self["header"] = Label(_("Kategorien"))
         self["subtitle"] = Label(_(list_header))
@@ -46,10 +57,64 @@ class CategoryListScreen(Screen):
         self["status"] = Label(_(""))
 
         self["actions"] = ActionMap(
-            ["OkCancelActions"],
-            {"ok": self.open_category, "cancel": self.close},
+            ["OkCancelActions", "ColorActions"],
+            {
+                "ok": self.open_category,
+                "cancel": self.close,
+                "yellow": self._hide_current,
+                "blue": self._show_all,
+            },
         )
         self.onLayoutFinish.append(self._load)
+
+    def _hidden(self):
+        """Namen der ausgeblendeten Gruppen (Liste, stabil sortiert)."""
+        wert = self.cfg.get("hidden_categories", [])
+        if isinstance(wert, dict):
+            # Altbestand: frueher als {name: true} gespeichert
+            return sorted([k for k, v in wert.items() if v])
+        if isinstance(wert, (list, tuple)):
+            return [str(x) for x in wert]
+        return []
+
+    def _set_hidden(self, namen):
+        self.cfg.set("hidden_categories", sorted(set(namen)))
+        try:
+            self.cfg.save()
+        except Exception:
+            pass
+
+    def _hide_current(self):
+        """GELB: markierte Gruppe ausblenden (oder wieder einblenden)."""
+        sel = self["list"].getCurrent()
+        if not sel or sel[1] in (None, "__fav__"):
+            # "Alle" und "Favoriten" lassen sich nicht ausblenden — sonst
+            # waere der Screen nicht mehr bedienbar.
+            self["status"].setText(_("Diese Zeile lässt sich nicht ausblenden"))
+            return
+        name = sel[0]
+        if name.startswith("- "):
+            name = name[2:]   # Marker der ausgeblendeten Sektion
+        versteckt = self._hidden()
+        if name in versteckt:
+            versteckt.remove(name)
+            self._set_hidden(versteckt)
+            self["status"].setText(_("\u201e%s\u201c wieder eingeblendet") % name)
+        else:
+            versteckt.append(name)
+            self._set_hidden(versteckt)
+            self["status"].setText(_("\u201e%s\u201c ausgeblendet") % name)
+        self._load()
+
+    def _show_all(self):
+        """BLAU: alle ausgeblendeten Gruppen wieder anzeigen."""
+        anzahl = len(self._hidden())
+        if not anzahl:
+            self["status"].setText(_("Nichts ausgeblendet"))
+            return
+        self._set_hidden([])
+        self["status"].setText(_("%d Gruppen wieder eingeblendet") % anzahl)
+        self._load()
 
     def _build_api(self):
         providers = self.cfg.providers()
@@ -67,20 +132,43 @@ class CategoryListScreen(Screen):
         except Exception as e:
             self["list"].setList([(_("Fehler: %s") % str(e), None)])
             return
-        # "Alle" als erster Eintrag (category_id=None zeigt alles)
+        self._alle = cats
+        versteckt = set(self._hidden())
+
         entries = [(_("Alle"), None)]
-        # Favoriten ganz oben, aber nur wenn es welche gibt und es die
-        # Live-TV-Ebene ist (bei Filmen/Serien waere der Eintrag sinnlos).
         try:
             favs = self.cfg.favorites()
         except Exception:
             favs = []
         if favs and self.category_action == "live_categories":
             entries.append((_("Favoriten (%d)") % len(favs), "__fav__"))
+
+        sichtbar = 0
         for c in cats:
-            entries.append((c.get("category_name", "?"), c.get("category_id")))
+            name = c.get("category_name", "?")
+            if name in versteckt:
+                continue
+            # Ausgeblendete Gruppen bleiben mit einem Punkt markiert sichtbar,
+            # damit man sie mit GELB wieder einschalten kann. Ohne diesen
+            # Anker findet man sie nicht mehr.
+            entries.append((name, c.get("category_id")))
+            sichtbar += 1
+
+        # Die ausgeblendeten als eigene Sektion unten anhängen — gedimmt
+        # markiert, damit klar ist, dass sie normalerweise nicht erscheinen.
+        if versteckt:
+            for c in cats:
+                name = c.get("category_name", "?")
+                if name in versteckt:
+                    entries.append(("- " + name, c.get("category_id")))
+
         self["list"].setList(entries)
-        self["status"].setText(_("%d Kategorien") % len(cats))
+        if versteckt:
+            self["status"].setText(
+                _("%d Kategorien · %d ausgeblendet (GELB ein/aus)")
+                % (sichtbar, len(versteckt)))
+        else:
+            self["status"].setText(_("%d Kategorien") % len(cats))
 
     def open_category(self):
         sel = self["list"].getCurrent()

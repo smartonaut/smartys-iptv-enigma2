@@ -47,8 +47,20 @@ class LiveListScreen(BaseListScreen):
         (_theme.TASTE_OK, "OK", "Abspielen"),
         (_theme.TASTE_ROT, "ROT", "Aufnahme"),
         (_theme.TASTE_GELB, "GELB", "Favorit"),
+        (_theme.TASTE_BLAU, "BLAU", "Sortierung"),
         (None, "EXIT", "Zurück"),
     ]
+
+    # Sortiermodi in der Reihenfolge, in der BLAU sie durchschaltet.
+    # "original" ist die Reihenfolge des Anbieters — die hat oft System
+    # (HD vor SD, nach Region), deshalb bleibt sie der erste Zustand.
+    SORT_MODES = ("original", "az", "za", "fav_first")
+    SORT_LABEL = {
+        "original": "Anbieter",
+        "az": "A-Z",
+        "za": "Z-A",
+        "fav_first": "Favoriten zuerst",
+    }
 
     def __init__(self, session, cfg, category_id=None,
                  header_text=None, subtitle_text=None):
@@ -112,12 +124,52 @@ class LiveListScreen(BaseListScreen):
         # Liste neu aufbauen, damit das Sternchen sofort erscheint.
         self._reload()
 
+    def on_blue(self):
+        """BLAU: Sortierung durchschalten (Anbieter -> A-Z -> Z-A -> Favoriten)."""
+        aktuell = self.cfg.get("sort_mode", "original")
+        try:
+            idx = self.SORT_MODES.index(aktuell)
+        except ValueError:
+            idx = 0
+        neu = self.SORT_MODES[(idx + 1) % len(self.SORT_MODES)]
+        self.cfg.set("sort_mode", neu)
+        try:
+            self.cfg.save()
+        except Exception:
+            pass
+        # Markierung merken, damit man nach dem Umsortieren nicht wieder
+        # oben in der Liste landet und den Sender suchen muss.
+        sel = self["list"].getCurrent()
+        merken = sel[1].get("stream_id") if sel and sel[1] else None
+        self._reload()
+        self["status"].setText(
+            _("Sortierung: %s") % self.SORT_LABEL.get(neu, neu))
+        self._springe_zu(merken)
+
+    def _springe_zu(self, stream_id):
+        """Cursor auf den zuvor markierten Sender setzen (nach Sortierung)."""
+        if stream_id is None:
+            return
+        try:
+            eintraege = self["list"].list or []
+        except Exception:
+            return
+        for i, eintrag in enumerate(eintraege):
+            daten = eintrag[1] if isinstance(eintrag, (tuple, list)) and len(eintrag) > 1 else None
+            if isinstance(daten, dict) and daten.get("stream_id") == stream_id:
+                try:
+                    self["list"].moveToIndex(i)
+                except Exception:
+                    pass
+                return
+
     def _reload(self):
         try:
             items, status = self._fetch()
         except Exception:
             return
         self["list"].setList(items)
+        self["status"].setText(status)
 
     def _on_close(self):
         for t in (self._preview_timer, self._epg_timer, self._picon_timer):
@@ -166,7 +218,40 @@ class LiveListScreen(BaseListScreen):
                 # Kein Emoji: die Box rendert sie als leeres Kaestchen.
                 name = "* " + name
             eintraege.append((name, s))
+
+        # Sortierung anwenden. Der Vergleich läuft auf dem Sendernamen ohne
+        # das Favoriten-Sternchen und ohne führende Zahlen, sonst sortiert
+        # "1. Das Erste" vor "ARD" obwohl der Nutzer alphabetisch meint.
+        modus = self.cfg.get("sort_mode", "original")
+        if modus in ("az", "za", "fav_first"):
+            eintraege = self._sortiere(eintraege, modus, favs)
+
         return (eintraege, _("%d Sender") % len(echte))
+
+    def _sortiere(self, eintraege, modus, favs):
+        """Sortiert die Liste nach dem gewählten Modus."""
+        def schluessel(eintrag):
+            daten = eintrag[1] if isinstance(eintrag, (tuple, list)) else eintrag
+            name = (daten.get("name") or "").strip()
+            # Favoriten-Sternchen abschneiden, sonst stehen alle Favoriten
+            # gemeinsam unter "*" am Anfang.
+            if name.startswith("* "):
+                name = name[2:]
+            return name.casefold()
+
+        if modus == "az":
+            return sorted(eintraege, key=schluessel)
+        if modus == "za":
+            return sorted(eintraege, key=schluessel, reverse=True)
+        # fav_first: Favoriten nach oben, innerhalb der Gruppen alphabetisch
+        fav_set = set(favs)
+
+        def fav_schluessel(eintrag):
+            daten = eintrag[1] if isinstance(eintrag, (tuple, list)) else eintrag
+            ist_fav = str(daten.get("stream_id")) in fav_set
+            return (0 if ist_fav else 1, schluessel(eintrag))
+
+        return sorted(eintraege, key=fav_schluessel)
 
     def _on_select(self, ch):
         stream_id = ch.get("stream_id")
