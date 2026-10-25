@@ -194,7 +194,6 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
 
     # Pig-Vorschau rechts
     if preview:
-        teile.append(_flaeche(806, karte_y, 426, 254, BORDER, z=1))
         # Video-Vorschau: Source direkt, ohne render, mit alphatest — so
         # wird der Bereich aus der OSD-Ebene ausgespart und das laufende
         # Video scheint durch.
