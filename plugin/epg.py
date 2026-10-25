@@ -63,7 +63,13 @@ class EpgScreen(Screen):
                 "red": self.on_rec,
             },
         )
+        # Wie viele Verbindungen die Line erlaubt, wird zentral in
+        # recorder.verbindungs_hinweis() ermittelt — eine Quelle statt zwei.
         self.onLayoutFinish.append(self._load)
+
+    def _hinweis(self):
+        """Warntext zur Verbindungszahl (siehe recorder.verbindungs_hinweis)."""
+        return recorder.verbindungs_hinweis(self.api)
 
     def _load(self):
         try:
@@ -109,14 +115,27 @@ class EpgScreen(Screen):
             return
         url = self.api.creds.stream_url(self.stream_id, "ts")
         name = "%s — %s" % (self.channel_name, title)
-        sched = recorder.get_scheduler()
-        sched.schedule(url, name, start_ts, end_ts)
-        self.session.open(
+
+        def _bestaetigt(ja):
+            if not ja:
+                return
+            sched = recorder.get_scheduler()
+            sched.schedule(url, name, start_ts, end_ts)
+            self.session.open(
+                MessageBox,
+                _("Timer-Aufnahme geplant:\n%s\n%s") % (
+                    name, _fmt_time(ep.get("start", "")),
+                ),
+                MessageBox.TYPE_INFO, timeout=6)
+
+        self.session.openWithCallback(
+            _bestaetigt,
             MessageBox,
-            _("Timer-Aufnahme geplant:\n%s\n%s") % (
-                name, _fmt_time(ep.get("start", "")),
-            ),
-            MessageBox.TYPE_INFO, timeout=6)
+            _("Aufnahme programmieren:\n%s\n%s–%s\n\n%s\n\nFortfahren?") % (
+                title, _fmt_time(ep.get("start", "")),
+                _fmt_time(ep.get("end", "")), self._hinweis()),
+            MessageBox.TYPE_YESNO,
+        )
 
     def on_ok(self):
         """OK = sofortige Aufnahme des markierten Senders starten/stoppen."""
@@ -128,13 +147,23 @@ class EpgScreen(Screen):
                 MessageBox.TYPE_INFO, timeout=5)
         else:
             url = self.api.creds.stream_url(self.stream_id, "ts")
-            try:
-                path = rec.start(url, self.channel_name)
-            except Exception as e:
+
+            def _starten(ja):
+                if not ja:
+                    return
+                try:
+                    path = rec.start(url, self.channel_name)
+                except Exception as e:
+                    self.session.open(
+                        MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
+                        MessageBox.TYPE_ERROR, timeout=5)
+                    return
                 self.session.open(
-                    MessageBox, _("Aufnahme fehlgeschlagen: %s") % str(e),
-                    MessageBox.TYPE_ERROR, timeout=5)
-                return
-            self.session.open(
-                MessageBox, _("Aufnahme gestartet:\n%s") % path,
-                MessageBox.TYPE_INFO, timeout=5)
+                    MessageBox, _("Aufnahme gestartet:\n%s") % path,
+                    MessageBox.TYPE_INFO, timeout=5)
+
+            self.session.openWithCallback(
+                _starten, MessageBox,
+                _("Jetzt aufnehmen: %s\n\n%s\n\nFortfahren?")
+                % (self.channel_name, self._hinweis()),
+                MessageBox.TYPE_YESNO)

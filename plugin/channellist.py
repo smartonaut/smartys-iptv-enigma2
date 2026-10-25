@@ -390,8 +390,20 @@ class LiveListScreen(BaseListScreen):
                 MessageBox, _("Aufnahme beendet:\n%s") % path,
                 MessageBox.TYPE_INFO, timeout=5)
         else:
-            recorder.ask_recording(self.session, url, name,
-                                   api=self.api, stream_id=stream_id)
+            def _starten(ja):
+                if not ja:
+                    return
+                recorder.ask_recording(self.session, url, name,
+                                       api=self.api, stream_id=stream_id)
+
+            # Erst warnen, dann die eigentliche Aufnahmefrage — sonst
+            # startet die Aufnahme und der Nutzer merkt zu spaet, dass er
+            # nicht mehr umschalten kann.
+            self.session.openWithCallback(
+                _starten, MessageBox,
+                _("Aufnahme starten: %s\n\n%s\n\nFortfahren?")
+                % (name, recorder.verbindungs_hinweis(self.api)),
+                MessageBox.TYPE_YESNO)
 
     def on_info(self):
         """EPG/INFO = EPG-Ansicht des markierten Senders öffnen."""

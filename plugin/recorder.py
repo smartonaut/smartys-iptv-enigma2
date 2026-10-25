@@ -283,6 +283,51 @@ def get_scheduler():
     return _scheduler
 
 
+# Zuletzt bekannte Verbindungszahl. auth() wird gecacht, weil der Server
+# bei mehreren Abrufen kurz hintereinander mit einem Fehler antwortet —
+# dann wuerde die Warnung faelschlich "unbekannt" melden, obwohl die Zahl
+# beim ersten Abruf schon bekannt war.
+_VERBINDUNGEN = {"wert": None, "gefragt": False}
+
+
+def max_verbindungen(api, neu_laden=False):
+    """Erlaubte Parallel-Verbindungen der Line (None, wenn unbekannt)."""
+    if _VERBINDUNGEN["gefragt"] and not neu_laden:
+        return _VERBINDUNGEN["wert"]
+    if api is None:
+        return _VERBINDUNGEN["wert"]
+    _VERBINDUNGEN["gefragt"] = True
+    try:
+        info = api.auth() or {}
+        wert = (info.get("user_info") or {}).get("max_connections")
+        _VERBINDUNGEN["wert"] = int(wert) if wert else None
+    except Exception:
+        # Fehler: alten Wert behalten, nicht auf None zuruecksetzen.
+        pass
+    return _VERBINDUNGEN["wert"]
+
+
+def verbindungs_hinweis(api):
+    """Warntext zur Verbindungszahl der Line.
+
+    Eine Aufnahme belegt eine Verbindung. Bei nur einer erlaubten kann
+    waehrend der Aufnahme nicht umgeschaltet werden — das muss vor dem
+    Start klar sein, sonst wirkt die Box spaeter kaputt.
+    """
+    max_v = max_verbindungen(api)
+    if max_v is None:
+        return ("Eine Aufnahme belegt eine Verbindung deiner Line. "
+                "Lässt die Line nur eine zu, kann während der Aufnahme "
+                "kein anderer Sender geschaut werden.")
+    if max_v <= 1:
+        return ("Deine Line erlaubt EINE Verbindung. Während der Aufnahme "
+                "läuft belegt sie diese — du kannst in dieser Zeit keinen "
+                "anderen Sender schauen.")
+    return ("Deine Line erlaubt %d Verbindungen. Während der Aufnahme bleiben "
+            "%d zum Schauen übrig — du kannst also weiter umschalten."
+            % (max_v, max_v - 1))
+
+
 def ask_recording(session, url, name, api=None, stream_id=None):
     """Zeigt die Aufnahme-Abfrage (endlos vs. bis Sendungsende) und startet."""
     from Screens.ChoiceBox import ChoiceBox
