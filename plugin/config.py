@@ -47,13 +47,15 @@ SEC_VERIFY_PLAINTEXT = "smartys-sec-password-ok"
 # sich ALLE neu vergebenen IDs — also nie ohne Migration anfassen.
 _PID_NAMESPACE = b"smartys-iptv-player-id-v1|"
 
-# Reihenfolge der Netzwerkschnittstellen für den Hardware-Fingerprint:
-# zuerst die fest verbaute Leitung, dann WLAN. Sortiert wird nach dieser
-# Priorität und danach alphabetisch — damit die Ableitung auf derselben
-# Hardware immer identisch ist, egal in welcher Reihenfolge der Kernel
-# die Interfaces auflistet.
-_NIC_PRIORITY = ("eth0", "eth1", "lan0", "wlan0")
+# Netzwerkschnittstellen im Hardware-Fingerprint: ALLE echten Interfaces
+# zählen, alphabetisch sortiert — damit die Ableitung auf derselben Hardware
+# immer identisch ist, egal in welcher Reihenfolge der Kernel sie auflistet.
+# Boxen mit Funk-Modul bringen so ihre WLAN-Hardware mit in die Identität.
 _NIC_IGNORE = ("lo",)
+# Virtuelle Interfaces: keine Hardware, MAC je nach System gleich oder leer.
+_NIC_IGNORE_PREFIX = ("tun", "tap", "docker", "veth", "br-", "virbr", "dummy", "sit", "gre")
+# Adressen, die nichts über das Gerät aussagen.
+_MAC_INVALID = ("00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff")
 
 # Spiegel der Identität AUSSERHALB der Plugin-JSON. Zweck: ein Reflash oder
 # ein versehentliches Löschen von /etc/enigma2 darf laufende Player nicht von
@@ -108,30 +110,69 @@ def _read_text(path):
         return ""
 
 
+def _nic_devpath(name):
+    try:
+        return os.path.realpath("/sys/class/net/%s/device" % name)
+    except OSError:
+        return ""
+
+
+def _nic_is_builtin(name):
+    """Fest verlötete Netz-Hardware? USB-Sticks und virtuelle Netdevs nicht.
+
+    Grund: ein USB-WLAN-Stick ist Zubehör, kein Teil der Box. Wer ihn abzieht,
+    bekäme sonst eine neue Player-ID — und die hängt per AAD an der Line.
+    """
+    dev = _nic_devpath(name)
+    if not dev or dev.startswith("/sys/devices/virtual"):
+        return False
+    return "/usb" not in dev
+
+
+def _usable_macs():
+    """Netzwerk-Interfaces mit gültiger MAC, alphabetisch.
+
+    Bevorzugt fest verbaute Interfaces (eth, verlötetes WLAN) — sie machen die
+    Identität einer Box aus. Gibt es keine (reine WLAN-Box mit Stick), werden
+    ersatzweise alle gültigen genommen, damit wenigstens die MAC unterscheidet.
+    Virtuelle Interfaces (tun/tap/docker/veth/bridge) fallen immer raus, ebenso
+    Null- und Broadcast-Adressen.
+    """
+    candidates = []
+    try:
+        names = sorted(os.listdir("/sys/class/net"))
+    except OSError:
+        return candidates
+    for name in names:
+        if name in _NIC_IGNORE or name.startswith(_NIC_IGNORE_PREFIX):
+            continue
+        mac = _read_text("/sys/class/net/%s/address" % name).strip().lower()
+        if len(mac) != 17 or mac in _MAC_INVALID:
+            continue
+        candidates.append((name, mac))
+    builtin = [c for c in candidates if _nic_is_builtin(c[0])]
+    return builtin or candidates
+
+
 def hw_fingerprint_parts():
     """Stabile Hardware-Merkmale der Box, in fester Reihenfolge.
 
     Bewusst KEINE Zufallswerte und nichts, was der Nutzer ändern oder das
     Image überschreiben kann (hostname, machine-id fallen weg). `sn` ist die
-    Geräteseriennummer aus dem Bootloader — der stärkste Anker.
+    Geräteseriennummer aus dem Bootloader — der stärkste Anker. `vumodel`
+    und `version` füllen die Lücke bei Vu+: die haben kein `boxtype` und
+    keine `sn`, nur diese beiden Felder.
     """
     parts = []
-    for key in ("boxtype", "sn", "chipset", "board_revision"):
+    for key in ("boxtype", "sn", "chipset", "board_revision", "vumodel", "version"):
         value = _read_text("/proc/stb/info/" + key)
         if value:
             parts.append("%s=%s" % (key, value))
-    # Netzwerk-MAC: nur zur Unterscheidung baugleicher Boxen ohne `sn`.
-    try:
-        names = [n for n in os.listdir("/sys/class/net") if n not in _NIC_IGNORE]
-    except OSError:
-        names = []
-    names.sort(key=lambda n: (
-        _NIC_PRIORITY.index(n) if n in _NIC_PRIORITY else len(_NIC_PRIORITY), n))
-    for name in names:
-        mac = _read_text("/sys/class/net/%s/address" % name)
-        if mac and mac != "00:00:00:00:00:00":
-            parts.append("nic=%s" % mac)
-            break
+    # Netzwerk: alle Interfaces, damit auch vorhandene WLAN-Hardware zählt.
+    # Der Interface-Name steht mit im Seed, damit eine Box mit Funk-Modul und
+    # eine ohne sich unterscheiden, selbst wenn die MACs nichts hergeben.
+    for name, mac in _usable_macs():
+        parts.append("nic:%s=%s" % (name, mac))
     return parts
 
 

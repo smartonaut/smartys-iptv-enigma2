@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 — 29.10.2026
+
+**Netzwerk-Merkmale vollständig im Fingerprint.** Bisher zählte nur die erste
+Schnittstelle. Jetzt gehen ALLE fest verbauten Interfaces ein (LAN und WLAN,
+je als `nic:<name>=<mac>`, alphabetisch), dazu `vumodel` und `version` aus
+`/proc/stb/info` — VU+-Boxen haben weder `boxtype` noch `sn`, ihnen fehlte
+bisher jedes Modell-Merkmal.
+
+Ausgeschlossen bleiben virtuelle Netze (tun/tap/docker/veth/bridge) sowie
+USB-Adapter: ein WLAN-Stick oder eine Dock-NIC ist Zubehör und darf keine
+Identität tragen, sonst ändert sich die Player-ID beim Abziehen. Gibt es keine
+eingebaute Schnittstelle, zählen ersatzweise alle.
+
+Gespeicherte Player-IDs bleiben unangetastet.
+
+
 Alle nennenswerten Änderungen am Smartys-IPTV-Enigma2-Plugin werden hier
 dokumentiert. Format orientiert an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/)
 und [Semantic Versioning](https://semver.org/lang/de/).
