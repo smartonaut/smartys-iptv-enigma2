@@ -4,6 +4,30 @@ Alle nennenswerten Änderungen am Smartys-IPTV-Enigma2-Plugin werden hier
 dokumentiert. Format orientiert an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/)
 und [Semantic Versioning](https://semver.org/lang/de/).
 
+## [0.4.1] — 2026-10-29
+
+### Neu
+
+- **Stabile Player-ID über Neuinstallation, GELB-Reset und Reflash hinweg.**
+  Bisher würfelte jeder Erststart eine neue Zufalls-ID; ein Reinstall oder
+  Image-Flash erzeugte damit einen neuen Panel-Player, und die zugewiesene
+  Line (per AAD an die alte ID gebunden) war weg — der Nutzer musste alles
+  neu einrichten.
+  - Neue Player leiten die ID **deterministisch** aus der Hardware ab:
+    `SHA-256(namespace | boxtype | sn | chipset | board_revision | NIC-MAC)`
+    → 6 Bytes im MAC-Format mit lokal-administriertem Bit (`02:..`).
+    Die echte Hardware-MAC wird **nicht** verwendet und ist aus der ID nicht
+    zurückrechenbar.
+  - Zusätzlich wird die Identität (ID + Pairing-Passwort) in einen Spiegel
+    geschrieben (`/media/hdd/.smartysiptv-identity.json`, dann
+    `/etc/enigma2/.smartysiptv-identity.json`), der einen Image-Flash
+    überlebt. Reihenfolge: JSON → Spiegel → Hardware-Ableitung.
+  - **Bestehende Player-IDs werden nie angefasst** — kein Umbenennen, keine
+    Migration, kein Neu-Würfeln. Ein Spiegel mit fremder ID wird niemals
+    überschrieben.
+  - `reset()` (GELB „Pairing löschen") behält ID und Pairing-Passwort und
+    entfernt nur Lines, Session und EPG-Cache.
+
 ## [0.1.0] — 2026-10-10 (Alpha)
 
 Erste veröffentlichte Version als `.ipk` (Architecture: all) für Enigma2-Boxen
