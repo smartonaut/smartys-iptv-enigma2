@@ -7,6 +7,10 @@
 # Abbruch bei JEDEM Fehler (set -e) — ein halb veroeffentlichter Stand ist
 # schlimmer als gar keiner, weil Download und Ankuendigung auseinanderlaufen.
 set -euo pipefail
+
+# Ziel-VPS (SSH-Alias) und Basispfad nicht hart verdrahten
+VPS_HOST="${VPS_HOST:-hostinger}"
+VPS_BASE="${VPS_BASE:-/opt}"
 cd "$(dirname "$0")"
 
 NUR_PRUEFEN=0
@@ -49,7 +53,7 @@ pruefe() {
     fi
 }
 
-# Private Netze — die Beispieladresse 192.0.2.12 ist erlaubt und wird oben
+# Private Netze — die Beispieladresse 192.0.2.10 ist erlaubt und wird oben
 # herausgefiltert. Jede andere interne Adresse gehoert nicht ins Repo.
 pruefe '192\.168\.[0-9]+\.[0-9]+' "interne IP (192.168.x.x)" "${QUELLEN[*]}"
 pruefe '\b10\.[0-9]+\.[0-9]+\.[0-9]+\b' "interne IP (10.x.x.x)" "${QUELLEN[*]}"
@@ -148,9 +152,9 @@ ok "Asset am Release nachgeprueft"
 
 echo
 echo "== 6) Download-Server =="
-scp -q -o ConnectTimeout=8 "$IPK" hostinger:/home/user/docker-host/camviewer-dl/data/ \
+scp -q -o ConnectTimeout=8 "$IPK" "$VPS_HOST:/opt/camviewer-dl/data/" \
     || tot "Upload fehlgeschlagen"
-ssh -o ConnectTimeout=8 hostinger "cd /home/user/docker-host/camviewer-dl/data \
+ssh -o ConnectTimeout=8 "$VPS_HOST" "cd /opt/camviewer-dl/data \
     && cp apps.json apps.json.bak.\$(date +%Y%m%d-%H%M%S) \
     && sed -i 's|enigma2-plugin-extensions-smartysiptv_[0-9.]*_all\.ipk|$IPK|g' apps.json" \
     || tot "apps.json aktualisieren fehlgeschlagen"
@@ -165,10 +169,10 @@ rm -f /tmp/_dl.ipk
 
 echo
 echo "== 7) Website =="
-ssh -o ConnectTimeout=8 hostinger "sed -i 's|v[0-9]\+\.[0-9]\+\.[0-9]\+|v$VERSION|g' \
-    /home/user/docker-host/iptv-backend/site-player/index.html" \
+ssh -o ConnectTimeout=8 "$VPS_HOST" "sed -i 's|v[0-9]\+\.[0-9]\+\.[0-9]\+|v$VERSION|g' \
+    /opt/iptv-backend/site-player/index.html" \
     || tot "Website-Badge fehlgeschlagen"
-ssh -o ConnectTimeout=8 hostinger "cd /home/user/docker-host/iptv-backend \
+ssh -o ConnectTimeout=8 "$VPS_HOST" "cd /opt/iptv-backend \
     && docker compose up -d --build player-site >/dev/null 2>&1" \
     || tot "Website-Neubau fehlgeschlagen"
 sleep 5
@@ -179,8 +183,8 @@ ok "Website zeigt v$VERSION"
 echo
 echo "== 8) Forum =="
 if scp -q -o ConnectTimeout=8 ~/.hermes/cache/scratch/forum_release.py \
-        hostinger:/tmp/ 2>/dev/null; then
-    ssh -o ConnectTimeout=8 hostinger "cd /tmp && VERSION=$VERSION python3 forum_release.py 2>&1 | tail -3" \
+        $VPS_HOST:/tmp/ 2>/dev/null; then
+    ssh -o ConnectTimeout=8 "$VPS_HOST" "cd /tmp && VERSION=$VERSION python3 forum_release.py 2>&1 | tail -3" \
         || warn "Forum-Beitrag fehlgeschlagen — bitte manuell nachtragen"
 else
     warn "forum_release.py nicht gefunden — Forum-Schritt uebersprungen"

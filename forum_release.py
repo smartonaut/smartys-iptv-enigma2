@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 
 BASIS = "https://forum.smartys.tech"
-CRED = "/home/user/docker-host/flarum/CREDENTIALS.txt"
+CRED = os.environ.get("FORUM_CRED", os.path.expanduser("~/.config/smartys/forum_cred.txt"))
 DISCUSSION = 13
 
 
