@@ -44,8 +44,18 @@ def _skin(name, footer, qr=False, qr_rechts=False, config_h=None):
             'zPosition="3" transparent="1" alphatest="blend" />'
             '<widget name="qr2" position="%d,%d" size="%d,%d" scale="1" '
             'zPosition="3" transparent="1" alphatest="blend" />'
+            '<eLabel text="LAN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3" />'
+            '<eLabel text="VPN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3" />'
             % (theme.scale(800), theme.scale_y(320), theme.scale(170), theme.scale_y(170),
-               theme.scale(1000), theme.scale_y(320), theme.scale(170), theme.scale_y(170))
+               theme.scale(1000), theme.scale_y(320), theme.scale(170), theme.scale_y(170),
+               theme.scale(800), theme.scale_y(494), theme.scale(170), theme.scale_y(22),
+               theme.font(14), theme.MUTED,
+               theme.scale(1000), theme.scale_y(494), theme.scale(170), theme.scale_y(22),
+               theme.font(14), theme.MUTED)
         )
         config_w = 720
     elif qr:
@@ -54,8 +64,18 @@ def _skin(name, footer, qr=False, qr_rechts=False, config_h=None):
             'zPosition="3" transparent="1" alphatest="blend" />'
             '<widget name="qr2" position="%d,%d" size="%d,%d" scale="1" '
             'zPosition="3" transparent="1" alphatest="blend" />'
+            '<eLabel text="LAN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3" />'
+            '<eLabel text="VPN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3" />'
             % (theme.scale(48), theme.scale_y(400), theme.scale(160), theme.scale_y(160),
-               theme.scale(240), theme.scale_y(400), theme.scale(160), theme.scale_y(160))
+               theme.scale(240), theme.scale_y(400), theme.scale(160), theme.scale_y(160),
+               theme.scale(48), theme.scale_y(564), theme.scale(160), theme.scale_y(22),
+               theme.font(14), theme.MUTED,
+               theme.scale(240), theme.scale_y(564), theme.scale(160), theme.scale_y(22),
+               theme.font(14), theme.MUTED)
         )
         config_w = 1184
     else:
@@ -324,7 +344,10 @@ class LineEntryScreen(ConfigListScreen, Screen):
             self._web_urls = []
         self.onClose.append(self._web_close)
         if self._web_urls:
-            self["status"].setText(_("Handy: %s") % self._web_urls[0][1])
+            self["status"].setText(
+                _("Handy: links LAN (%s) · rechts VPN (%s)")
+                % (self._web_urls[0][1],
+                   self._web_urls[1][1] if len(self._web_urls) > 1 else "—"))
 
     def _web_receive(self, daten):
         """Laeuft im Server-Thread: nur merken, UI-Update im Poll."""
