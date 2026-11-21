@@ -30,11 +30,25 @@ from . import crypto as sec
 from . import unlock_web
 
 
-def _skin(name, footer, qr=False):
+def _skin(name, footer, qr=False, qr_rechts=False, config_h=None):
     """Vollbild-Skin mit 'config'-Widget (ConfigList) statt 'list'.
-    qr: zusätzlich ein QR-Pixmap-Widget (Handy-Scan zur Passwort-Eingabe)."""
+    qr: zusätzlich QR-Pixmap-Widgets (Handy-Scan zur Eingabe).
+    qr_rechts: QRs rechts neben der Liste statt darunter (bei vielen Feldern).
+    """
     w, h = theme.osd_size()
-    if qr:
+    if config_h is None:
+        config_h = 60 if qr and not qr_rechts else 300
+    if qr and qr_rechts:
+        qr_widget = (
+            '<widget name="qr" position="%d,%d" size="%d,%d" scale="1" '
+            'zPosition="3" transparent="1" alphatest="blend" />'
+            '<widget name="qr2" position="%d,%d" size="%d,%d" scale="1" '
+            'zPosition="3" transparent="1" alphatest="blend" />'
+            % (theme.scale(800), theme.scale_y(320), theme.scale(170), theme.scale_y(170),
+               theme.scale(1000), theme.scale_y(320), theme.scale(170), theme.scale_y(170))
+        )
+        config_w = 720
+    elif qr:
         qr_widget = (
             '<widget name="qr" position="%d,%d" size="%d,%d" scale="1" '
             'zPosition="3" transparent="1" alphatest="blend" />'
@@ -43,10 +57,10 @@ def _skin(name, footer, qr=False):
             % (theme.scale(48), theme.scale_y(400), theme.scale(160), theme.scale_y(160),
                theme.scale(240), theme.scale_y(400), theme.scale(160), theme.scale_y(160))
         )
-        config_h = 60
+        config_w = 1184
     else:
         qr_widget = ""
-        config_h = 300
+        config_w = 1184
     return ("""
         <screen name="%s" position="0,0" size="%d,%d" backgroundColor="%s" flags="wfNoBorder">
             <ePixmap pixmap="%s/images/background.png" position="0,0" size="%d,%d" alphatest="off" zPosition="-1" />
@@ -72,7 +86,7 @@ def _skin(name, footer, qr=False):
         theme.scale(48), theme.scale_y(158), theme.scale(200), theme.scale_y(3), theme.GOLD,
         theme.scale(48), theme.scale_y(176), theme.scale(1184), theme.scale_y(110),
         theme.font(18), theme.TEXT,
-        theme.scale(48), theme.scale_y(300), theme.scale(1184), theme.scale_y(config_h),
+        theme.scale(48), theme.scale_y(300), theme.scale(config_w), theme.scale_y(config_h),
         theme.scale(44),
         qr_widget,
         theme.scale(48), theme.scale_y(620), theme.scale(1184), theme.scale_y(30),
@@ -238,7 +252,9 @@ class LineEntryScreen(ConfigListScreen, Screen):
     """Line LOKAL eingeben — wird nur verschlüsselt auf der Box gespeichert."""
 
     def __init__(self, session):
-        self.skin = _skin("SmartysLineEntry", "GRÜN = Speichern   ·   EXIT = Zurück")
+        self.skin = _skin("SmartysLineEntry",
+                          "GRÜN = Speichern   ·   EXIT = Zurück",
+                          qr=True, qr_rechts=True, config_h=280)
         Screen.__init__(self, session)
         self.session = session
         self.cfg = Config().load()
@@ -261,6 +277,8 @@ class LineEntryScreen(ConfigListScreen, Screen):
 
         self["header"] = Label(_("Line lokal eingeben"))
         self["subtitle"] = Label(_("Verschlüsselt auf dieser Box"))
+        self["qr"] = Pixmap()
+        self["qr2"] = Pixmap()
         self["explain"] = Label(_(
             "Deine Line wird AES-256-verschlüsselt auf dieser Box gespeichert.\n"
             "Sie wird NIE an einen Server übertragen — auch nicht an uns.\n"
@@ -275,6 +293,104 @@ class LineEntryScreen(ConfigListScreen, Screen):
                 "red": self.close,
             },
         )
+
+        # Handy-Eingabe: Server, Benutzer und Line-Passwort am Telefon tippen
+        # statt 20 Zeichen mit der Fernbedienung. Das Sicherheits-Passwort
+        # bleibt bewusst auf der Box - es schuetzt die Line, die hier
+        # eingegeben wird.
+        self._web_urls = []
+        self._pending = None
+        self._web_timer = eTimer()
+        try:
+            self._web_timer.callback.append(self._web_poll)
+        except Exception:
+            self._web_timer.timeout.connect(self._web_poll)
+        self._web_timer.start(500, False)
+        try:
+            port = unlock_web.start(
+                self._web_receive,
+                title=_("Line eingeben"),
+                hint=_("Server, Benutzer und Line-Passwort aus deinem "
+                       "Panel-Auszug eintragen."),
+                button=_("Übernehmen"),
+                fields=[
+                    ("server", _("Server-URL"), "text", "http://host:port"),
+                    ("user", _("Benutzername"), "text", ""),
+                    ("linepw", _("Line-Passwort"), "password", ""),
+                ])
+            self._web_urls = unlock_web.urls(port)
+            self.onLayoutFinish.append(self._load_qr)
+        except Exception:
+            self._web_urls = []
+        self.onClose.append(self._web_close)
+        if self._web_urls:
+            self["status"].setText(_("Handy: %s") % self._web_urls[0][1])
+
+    def _web_receive(self, daten):
+        """Laeuft im Server-Thread: nur merken, UI-Update im Poll."""
+        self._pending = daten
+        return True
+
+    def _web_poll(self):
+        daten = self._pending
+        if daten is None:
+            return
+        self._pending = None
+        try:
+            if daten.get("server"):
+                self.server.value = daten["server"]
+            if daten.get("user"):
+                self.user.value = daten["user"]
+            if daten.get("linepw"):
+                self.linepw.value = daten["linepw"]
+            for feld in (self.server, self.user, self.linepw):
+                try:
+                    feld.save()
+                except Exception:
+                    pass
+            try:
+                self["config"].invalidate()
+            except Exception:
+                pass
+            self["status"].setText(
+                _("✓ Vom Handy übernommen — Sicherheits-Passwort noch eintippen"))
+        except Exception as exc:
+            self["status"].setText(_("Übernahme fehlgeschlagen: %s") % exc)
+
+    def _load_qr(self):
+        """QR-Codes fuer die Handy-Eingabe (LAN + VPN)."""
+        if not self._web_urls:
+            for name in ("qr", "qr2"):
+                try:
+                    self[name].hide()
+                except Exception:
+                    pass
+            return
+        try:
+            from . import qr as qrgen
+        except Exception:
+            return
+        for idx, (_label, url) in enumerate(self._web_urls[:2]):
+            name = "qr" if idx == 0 else "qr2"
+            qr_path = "/tmp/smartys_line_qr_%d.png" % idx
+            try:
+                if not qrgen.make_png(url, qr_path):
+                    self[name].hide()
+                    continue
+                pix = LoadPixmap(qr_path)
+                if pix is not None:
+                    self[name].instance.setPixmap(pix)
+                    self[name].show()
+                else:
+                    self[name].hide()
+            except Exception:
+                try:
+                    self[name].hide()
+                except Exception:
+                    pass
+
+    def _web_close(self):
+        unlock_web.stop()
 
     def save_line(self):
         if not sec.crypto_available():

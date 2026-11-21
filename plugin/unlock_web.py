@@ -39,8 +39,7 @@ button { width: 100%; padding: 12px; font-size: 16px; background: #ffc94d;
   <h1>__TITLE__</h1>
   <p>__HINT__</p>
   <form method="post">
-    <input type="__FIELD_TYPE__" name="text" autocomplete="off" autofocus
-           placeholder="__PLACEHOLDER__" autocapitalize="off">
+    __FORM__
     <button type="submit">__BUTTON__</button>
   </form>
   __STATUS__
@@ -53,17 +52,41 @@ _params = {
     "field_type": "password",
     "placeholder": "Passwort",
     "button": "Entsperren",
+    "form": "",
 }
+
+# Felder fuer Mehrfach-Eingabe: [(name, label, typ, placeholder), ...]
+# Ist fields gesetzt, liefert der Callback ein dict statt eines str.
+_fields = None
 
 _server = None
 _thread = None
 _callback = None
 
 
+def _form_html():
+    """HTML fuer das Formular: ein Feld (klassisch) oder mehrere."""
+    if not _fields:
+        return ('<input type="%s" name="text" autocomplete="off" autofocus\n'
+                '           placeholder="%s" autocapitalize="off">'
+                % (_params["field_type"], _params["placeholder"]))
+    teile = []
+    for i, (name, label, typ, platzhalter) in enumerate(_fields):
+        teile.append(
+            '<label for="f_%s">%s</label>'
+            '<input id="f_%s" type="%s" name="%s" autocomplete="off"%s '
+            'placeholder="%s" autocapitalize="off" spellcheck="false">'
+            % (name, label, name, typ, name,
+               " autofocus" if i == 0 else "", platzhalter))
+    return "".join(teile)
+
+
 class _Handler(BaseHTTPRequestHandler):
     def _page(self, status):
         html = _PAGE
-        for key, val in _params.items():
+        werte = dict(_params)
+        werte["form"] = _form_html()
+        for key, val in werte.items():
             html = html.replace("__%s__" % key.upper(), val)
         return html.replace("__STATUS__", status)
 
@@ -74,10 +97,17 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8", "replace")
         params = urllib.parse.parse_qs(body)
-        text = (params.get("text") or [""])[0]
         ok = False
-        if text and _callback:
-            ok = _callback(text)
+        if _fields:
+            daten = {}
+            for name, _label, _typ, _pl in _fields:
+                daten[name] = (params.get(name) or [""])[0].strip()
+            if any(daten.values()) and _callback:
+                ok = _callback(daten)
+        else:
+            text = (params.get("text") or [""])[0]
+            if text and _callback:
+                ok = _callback(text)
         if ok:
             status = '<p class="ok">&check; Übernommen &mdash; du kannst das Handy weglegen.</p>'
         else:
@@ -97,10 +127,16 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def start(callback, title=None, hint=None, field_type=None,
-          placeholder=None, button=None):
-    """Startet den Server in einem Daemon-Thread. Rückgabe: Port."""
-    global _server, _thread, _callback
+          placeholder=None, button=None, fields=None):
+    """Startet den Server in einem Daemon-Thread. Rückgabe: Port.
+
+    fields: optionale Liste [(name, label, typ, placeholder), ...] fuer ein
+    Formular mit mehreren Feldern. Der Callback bekommt dann ein dict
+    {name: wert} statt eines einzelnen Strings.
+    """
+    global _server, _thread, _callback, _fields
     stop()
+    _fields = list(fields) if fields else None
     if title is not None:
         _params["title"] = title
     if hint is not None:
@@ -119,7 +155,9 @@ def start(callback, title=None, hint=None, field_type=None,
 
 
 def stop():
-    global _server, _thread, _callback
+    global _server, _thread, _callback, _fields
+    _callback = None
+    _fields = None
     if _server is not None:
         try:
             _server.shutdown()
