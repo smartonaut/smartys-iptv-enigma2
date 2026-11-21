@@ -134,29 +134,63 @@ class CategoryListScreen(Screen):
         return sorted(cats, key=key)
 
     def _move_current(self, delta):
-        """Gruppe um eine Position verschieben und Reihenfolge speichern."""
+        """Gruppe um eine POSITION IN DER ANZEIGE verschieben.
+
+        Frueher wurde in self._alle getauscht, also in der Liste aller
+        Gruppen. Weil ausgeblendete Gruppen in einer eigenen Sektion unten
+        stehen, war der Nachbar dort fast immer eine unsichtbare Gruppe —
+        der Tausch blieb also ohne sichtbare Wirkung ("gruene Taste geht
+        nicht"). Jetzt wird innerhalb der Sektion getauscht, in der die
+        markierte Gruppe auch steht.
+        """
         sel = self["list"].getCurrent()
         if not sel or sel[1] in (None, "__fav__"):
             self["status"].setText(_("Diese Zeile lässt sich nicht verschieben"))
             return
-        name = sel[0]
-        if name.startswith("- "):
-            name = name[2:]
-        # Reihenfolge = alle Gruppen in aktueller Anzeige-Reihenfolge.
+        text = sel[0]
+        ist_versteckt = text.startswith("- ")
+        name = text[2:] if ist_versteckt else text
+
+        try:
+            eintraege = [e[0] for e in (self["list"].getList() or [])]
+            pos = self["list"].getCurrentIndex()
+        except Exception:
+            self["status"].setText(_("Verschieben nicht möglich"))
+            return
+        if not eintraege or pos >= len(eintraege):
+            return
+
+        # Nachbarn derselben Sektion suchen (ausgeblendet bleibt bei
+        # ausgeblendet, sichtbar bei sichtbar) — Kopfzeilen ueberspringen.
+        zielname = None
+        j = pos + delta
+        while 0 <= j < len(eintraege):
+            kandidat = eintraege[j]
+            if kandidat in (_("Alle"),) or kandidat.startswith(_("Favoriten (")):
+                j += delta
+                continue
+            if kandidat.startswith("- ") == ist_versteckt:
+                zielname = kandidat[2:] if ist_versteckt else kandidat
+                break
+            j += delta
+
+        if zielname is None:
+            self["status"].setText(_("\u201e%s\u201c ist schon am Rand") % name)
+            return
+
         reihe = [c.get("category_name", "?") for c in self._alle]
-        if name not in reihe:
+        if name not in reihe or zielname not in reihe:
+            self["status"].setText(_("Verschieben nicht möglich"))
             return
         i = reihe.index(name)
-        j = i + delta
-        if j < 0 or j >= len(reihe):
-            self["status"].setText(
-                _("„%s“ ist schon am Rand") % name)
-            return
-        reihe[i], reihe[j] = reihe[j], reihe[i]
+        k = reihe.index(zielname)
+        reihe[i], reihe[k] = reihe[k], reihe[i]
         self._set_order(reihe)
         self._load()
         self._springe_zu(name)
-        self["status"].setText(_("„%s“ verschoben") % name)
+        richtung = _("nach unten") if delta > 0 else _("nach oben")
+        self["status"].setText(
+            _("\u201e%s\u201c %s verschoben") % (name, richtung))
 
     def _springe_zu(self, name):
         """Cursor auf eine Gruppe setzen (nach dem Verschieben/Einblenden).
