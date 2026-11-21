@@ -147,8 +147,10 @@ class UnlockScreen(ConfigListScreen, Screen):
         )
 
     def _on_pw_change(self, element):
-        if element.value and not self._unlock_running:
-            self.unlock_now()
+        # NICHT bei jedem Tastendruck entsperren: PBKDF2 (310k Runden) blockiert
+        # die Box ~0,4 s pro Zeichen, und geprueft wird immer nur das Fragment.
+        # Entsperrt wird ueber GRUEN (unlock_now) oder den Handy-Weg (_web_poll).
+        return
 
     def unlock_now(self):
         if self._unlock_running:
@@ -211,7 +213,8 @@ class UnlockScreen(ConfigListScreen, Screen):
     def _web_poll(self):
         pw, self._web_pw = self._web_pw, None
         if pw:
-            self.pw.value = pw  # löst _on_pw_change -> unlock_now aus
+            self.pw.value = pw
+            self.unlock_now()   # Handy-Weg entsperrt direkt
 
     def _web_close(self):
         unlock_web.stop()
