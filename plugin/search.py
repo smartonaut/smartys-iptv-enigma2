@@ -68,6 +68,14 @@ class SearchScreen(Screen):
             'zPosition="2"/>'
             '<widget name="qr" position="%d,%d" size="%d,%d" scale="1" '
             'zPosition="3" transparent="1" alphatest="blend"/>'
+            '<widget name="qr2" position="%d,%d" size="%d,%d" scale="1" '
+            'zPosition="3" transparent="1" alphatest="blend"/>'
+            '<eLabel text="LAN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3"/>'
+            '<eLabel text="VPN" position="%d,%d" size="%d,%d" '
+            'font="Regular;%d" foregroundColor="%s" halign="center" '
+            'valign="center" transparent="1" zPosition="3"/>'
             '<widget name="list" position="%d,%d" size="%d,%d" '
             'render="Listbox" itemHeight="%d" scrollbarMode="showOnDemand" '
             'foregroundColor="%s" foregroundColorSelected="%s" '
@@ -88,9 +96,15 @@ class SearchScreen(Screen):
                 theme.scale_y(20), theme.font(14), theme.MUTED,
                 theme.scale(48), theme.scale_y(158), theme.scale(200),
                 theme.scale_y(3), theme.GOLD,
-                # QR (links unten)
-                theme.scale(48), theme.scale_y(300), theme.scale(160),
-                theme.scale_y(160),
+                # QR links unten, zwei Wege (LAN + VPN) untereinander
+                theme.scale(48), theme.scale_y(290), theme.scale(130),
+                theme.scale_y(130),
+                theme.scale(48), theme.scale_y(448), theme.scale(130),
+                theme.scale_y(130),
+                theme.scale(48), theme.scale_y(422), theme.scale(130),
+                theme.scale_y(20), theme.font(13), theme.MUTED,
+                theme.scale(48), theme.scale_y(580), theme.scale(130),
+                theme.scale_y(20), theme.font(13), theme.MUTED,
                 # Liste (rechts)
                 theme.scale(240), theme.scale_y(200), theme.scale(920),
                 theme.scale_y(400), theme.scale(38),
@@ -113,6 +127,7 @@ class SearchScreen(Screen):
         self["subtitle"] = Label(_("Filme + Serien durchsuchen"))
         self["list"] = MenuList([])
         self["qr"] = Pixmap()
+        self["qr2"] = Pixmap()
         self["status"] = Label(_("Lade …"))
         self["actions"] = ActionMap(
             ["OkCancelActions", "ColorActions", "SearchActions"],
@@ -125,6 +140,7 @@ class SearchScreen(Screen):
 
         # Handy-Eingabe (Text-Modus) + QR.
         self._web_url = None
+        self._web_urls = []
         # Timer fuer die Tastatur (siehe _start).
         self._kb_timer = eTimer()
         try:
@@ -145,7 +161,8 @@ class SearchScreen(Screen):
                 field_type="text",
                 placeholder="Suchbegriff",
                 button="Suchen")
-            self._web_url = "http://%s:%d" % (unlock_web.lan_ip(), port)
+            self._web_urls = unlock_web.urls(port)
+            self._web_url = self._web_urls[0][1] if self._web_urls else None
             self.onLayoutFinish.append(self._load_qr)
         except Exception:
             self._web_url = None
@@ -156,11 +173,9 @@ class SearchScreen(Screen):
     def _start(self):
         """Beim Oeffnen: Tastatur zeigen und Daten im Hintergrund laden."""
         threading.Thread(target=self._preload, daemon=True).start()
-        # Die Tastatur darf NICHT direkt aus onLayoutFinish geoeffnet werden:
-        # zu dem Zeitpunkt ist der Dialog noch nicht fertig aufgebaut und
-        # Enigma2 wirft "Modal open are allowed only from a screen which is
-        # modal!". Ein kurzer Timer loest das sauber.
-        self._kb_timer.start(400, True)
+        # Tastatur NICHT automatisch: sonst muss man erst mit EXIT zurueck,
+        # um die QR-Codes fuer die Handy-Eingabe zu sehen. GRUEN oeffnet sie.
+        self._status_normal()
 
     def open_keyboard(self):
         """Fernbedienung: Suchbegriff ueber die Enigma2-Tastatur eingeben."""
@@ -345,23 +360,32 @@ class SearchScreen(Screen):
                               item.get("series_id"), item.get("name", ""))
 
     def _load_qr(self):
-        qr_path = "/tmp/smartys_search_qr.png"
-        if not self._web_url:
-            self["qr"].hide()
-            return
-        try:
-            from . import qr as qrgen
-            if not qrgen.make_png(self._web_url, qr_path):
-                self["qr"].hide()
-                return
-            pix = LoadPixmap(qr_path)
-            if pix is not None:
-                self["qr"].instance.setPixmap(pix)
-                self["qr"].show()
-                return
-        except Exception:
-            pass
-        self["qr"].hide()
+        """Beide QR-Codes (LAN + VPN) laden."""
+        urls = getattr(self, "_web_urls", []) or []
+        if not urls and self._web_url:
+            urls = [("LAN", self._web_url)]
+        for idx in (0, 1):
+            name = "qr" if idx == 0 else "qr2"
+            try:
+                if idx >= len(urls):
+                    self[name].hide()
+                    continue
+                from . import qr as qrgen
+                qr_path = "/tmp/smartys_search_qr_%d.png" % idx
+                if not qrgen.make_png(urls[idx][1], qr_path):
+                    self[name].hide()
+                    continue
+                pix = LoadPixmap(qr_path)
+                if pix is not None:
+                    self[name].instance.setPixmap(pix)
+                    self[name].show()
+                else:
+                    self[name].hide()
+            except Exception:
+                try:
+                    self[name].hide()
+                except Exception:
+                    pass
 
     def _web_close(self):
         unlock_web.stop()
