@@ -110,15 +110,21 @@ def _widget(name, x, y, w, h, groesse, farbe, halign="left", z=2):
     )
 
 
-def tastenleiste(eintraege, y=682):
-    """Farbige Tasten-Hinweise: [("ROT", "Aufnahme"), ("GRÜN", "OK"), …].
+def tastenleiste(eintraege, y=682, dynamisch=()):
+    """Farbige Tasten-Hinweise: [("ROT", "Aufnahme"), (GRÜN", "OK"), …].
 
     Jede Taste bekommt ein farbiges Quadrat mit Kürzel und den Text daneben.
     Erwartet eine Liste aus (farbe, kuerzel, text); farbe ist ein Farbwert
     aus diesem Modul oder None (= neutrale Taste).
+
+    dynamisch: Kuerzel, deren Beschriftung der Screen zur Laufzeit aendern
+    will ("GELB" -> "Einblenden"). Fuer diese wird ein Widget
+    "taste_<kuerzel>" gebaut statt eines festen Labels; der Screen muss es
+    mit self["taste_gelb"] = Label(...) setzen.
     """
     if not eintraege:
         return ""
+    dyn = set(d.upper() for d in (dynamisch or ()))
     teile = []
     x = 48
     for farbe, kuerzel, beschriftung in eintraege:
@@ -128,14 +134,20 @@ def tastenleiste(eintraege, y=682):
         teile.append(_text(x, y, breite_kuerzel, 24, kuerzel, 13, "#0b0e14",
                            halign="center", z=3))
         text_w = max(60, 8 * len(beschriftung))
-        teile.append(_text(x + breite_kuerzel + 10, y, text_w, 24,
-                           beschriftung, 14, TEXT, z=3))
+        if kuerzel.upper() in dyn:
+            teile.append(_widget("taste_%s" % kuerzel.lower().replace("ü", "ue"),
+                                 x + breite_kuerzel + 10, y, text_w, 24,
+                                 14, TEXT, z=3))
+        else:
+            teile.append(_text(x + breite_kuerzel + 10, y, text_w, 24,
+                               beschriftung, 14, TEXT, z=3))
         x += breite_kuerzel + 10 + text_w + 26
     return "".join(teile)
 
 
 def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
-               footer="", epg=False, picon=False, tasten=None, karte=True):
+               footer="", epg=False, picon=False, tasten=None, karte=True,
+               tasten_dynamisch=()):
     """Baut einen vollständigen Vollbild-Skin.
 
     Alle Koordinaten in Referenz-Einheiten (1280x720) und werden skaliert.
@@ -233,7 +245,7 @@ def build_skin(name, logo=True, list_h=None, extra_widgets="", preview=False,
 
     # Tastenleiste (neu) oder alter Footer-Text
     if tasten:
-        teile.append(tastenleiste(tasten))
+        teile.append(tastenleiste(tasten, dynamisch=tasten_dynamisch))
     elif footer:
         teile.append(_text(48, 678, 1184, 30, footer, 15, MUTED))
 

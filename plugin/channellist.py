@@ -2,6 +2,11 @@
 """Smartys IPTV — Live-TV-Kanalliste (Kategorie-Filter, Aufnahme, Vorschau, EPG, Picon)."""
 
 import base64
+import re
+
+# Fuehrende Nummerierung in Sendernamen: "1. ", "01 - ", "1) ", "1: ".
+# Nicht "RTL2" oder "3sat" — dort steht die Ziffer mitten im Namen.
+_LEADING_NUM = re.compile(r"^\s*\d{1,3}\s*[\.\)\-:]?\s+")
 
 from Screens.MessageBox import MessageBox
 from Components.Label import Label
@@ -211,6 +216,7 @@ class LiveListScreen(BaseListScreen):
             favs_set = set(favs)
             echte = [s for s in echte
                      if str(s.get("stream_id")) in favs_set]
+
         eintraege = []
         for s in echte:
             name = s.get("name", "?")
@@ -237,7 +243,17 @@ class LiveListScreen(BaseListScreen):
             # gemeinsam unter "*" am Anfang.
             if name.startswith("* "):
                 name = name[2:]
-            return name.casefold()
+            # Umlaute wie im Deutschen einordnen: ohne das landet "Ärzte"
+            # hinter "ZDF", weil casefold() nach Unicode-Codepoint sortiert.
+            name = name.casefold()
+            for a, b in (("ä", "a"), ("ö", "o"), ("ü", "u"), ("ß", "ss")):
+                name = name.replace(a, b)
+            # Fuehrende Nummerierung entfernen: sonst steht "1. Das Erste"
+            # vor "ARD", obwohl alphabetisch gemeint ist. Betrifft "1. X",
+            # "01 - X", "1) X", "1: X" - aber nicht "RTL2" oder "3sat",
+            # weil dort die Ziffern mitten im Namen stehen.
+            name = _LEADING_NUM.sub("", name).strip()
+            return name
 
         if modus == "az":
             return sorted(eintraege, key=schluessel)
