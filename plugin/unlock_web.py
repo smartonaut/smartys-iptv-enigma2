@@ -135,7 +135,38 @@ def stop():
 
 
 def lan_ip():
-    """Ermittelt die LAN-IP der Box (für die Anzeige-URL im Screen)."""
+    """Ermittelt die LAN-IP der Box fuer die Handy-URL.
+
+    NICHT ueber eine Route zu 8.8.8.8 raten: geht der Verkehr ueber einen
+    VPN-Tunnel (tun0), liefert das die Tunnel-Adresse (10.x) - die ist im
+    WLAN nicht erreichbar und der QR-Code zeigt ins Leere.
+    Stattdessen das echte LAN-Interface (eth0/wlan0) nehmen.
+    """
+    import re
+    import subprocess
+    skip_prefix = ("lo", "tun", "tap", "docker", "br-", "veth", "wg")
+    try:
+        out = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=5).stdout.decode("utf-8", "replace")
+        cands = []
+        for line in out.splitlines():
+            m = re.search(r"^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)", line)
+            if not m:
+                continue
+            iface, ip = m.group(1), m.group(2)
+            if iface.startswith(skip_prefix):
+                continue
+            if ip.startswith("169.254.") or ip.startswith("127."):
+                continue
+            cands.append(ip)
+        if cands:
+            return cands[0]
+    except Exception:
+        pass
+
+    # Fallback: alte Methode (nur wenn 'ip' fehlt)
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
