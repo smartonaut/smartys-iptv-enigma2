@@ -378,6 +378,7 @@ class Config(object):
             return [{"server_url": p.get("server_url", ""),
                      "username": p.get("username", ""),
                      "password": p.get("password", ""),
+                     "epg_url": p.get("epg_url", ""),
                      "label": p.get("label", "")} for p in legacy]
         return []
 

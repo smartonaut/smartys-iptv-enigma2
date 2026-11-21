@@ -142,15 +142,26 @@ def lan_ip():
     WLAN nicht erreichbar und der QR-Code zeigt ins Leere.
     Stattdessen das echte LAN-Interface (eth0/wlan0) nehmen.
     """
+    ips = accessible_ips()
+    return ips[0][1] if ips else "127.0.0.1"
+
+
+def accessible_ips():
+    """Alle Adressen, unter denen die Handy-Seite erreichbar sein kann.
+
+    Reihenfolge: LAN zuerst (gleiches WLAN), dann VPN (Handy mit Tunnel).
+    Rueckgabe: [(label, ip), ...] mit label "LAN" bzw. "VPN".
+    """
     import re
     import subprocess
-    skip_prefix = ("lo", "tun", "tap", "docker", "br-", "veth", "wg")
+    skip_prefix = ("lo", "docker", "br-", "veth")
+    vpn_prefix = ("tun", "tap", "wg")
+    lan, vpn = [], []
     try:
         out = subprocess.run(
             ["ip", "-4", "-o", "addr", "show"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=5).stdout.decode("utf-8", "replace")
-        cands = []
         for line in out.splitlines():
             m = re.search(r"^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)", line)
             if not m:
@@ -160,19 +171,27 @@ def lan_ip():
                 continue
             if ip.startswith("169.254.") or ip.startswith("127."):
                 continue
-            cands.append(ip)
-        if cands:
-            return cands[0]
+            entry = ("VPN" if iface.startswith(vpn_prefix) else "LAN", ip)
+            (vpn if entry[0] == "VPN" else lan).append(entry)
     except Exception:
         pass
 
-    # Fallback: alte Methode (nur wenn 'ip' fehlt)
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except Exception:
-        return "127.0.0.1"
-    finally:
-        s.close()
+    if not lan and not vpn:
+        # Fallback: alte Methode (nur wenn 'ip' fehlt)
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            lan = [("LAN", s.getsockname()[0])]
+        except Exception:
+            pass
+        finally:
+            s.close()
+    return lan + vpn
+
+
+def urls(port=None):
+    """Fertige Handy-URLs inkl. Port, LAN zuerst."""
+    if port is None:
+        port = PORT
+    return [(label, "http://%s:%d" % (ip, port)) for label, ip in accessible_ips()]

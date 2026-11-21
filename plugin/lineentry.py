@@ -114,6 +114,7 @@ class UnlockScreen(ConfigListScreen, Screen):
 
         # Handy-Eingabe: lokalen Web-Server starten + QR für die URL laden.
         self._web_url = None
+        self._web_urls = []
         self._web_pw = None
         self._web_timer = eTimer()
         try:
@@ -123,14 +124,21 @@ class UnlockScreen(ConfigListScreen, Screen):
         self._web_timer.start(500, False)
         try:
             port = unlock_web.start(self._web_receive)
-            self._web_url = "http://%s:%d" % (unlock_web.lan_ip(), port)
+            # Alle erreichbaren Adressen: LAN (gleiches WLAN) und VPN (Handy
+            # mit Tunnel). Die LAN-Adresse kommt zuerst und traegt den QR.
+            self._web_urls = unlock_web.urls(port)
+            self._web_url = self._web_urls[0][1] if self._web_urls else None
             self.onLayoutFinish.append(self._load_unlock_qr)
         except Exception:
             self._web_url = None
+            self._web_urls = []
         self.onClose.append(self._web_close)
 
-        hint = (_("Passwort übers Handy eingeben (gleiches WLAN):\n%s")
-                % (self._web_url or _("— nicht verfügbar")))
+        if self._web_urls:
+            hint = _("Passwort übers Handy eingeben:") + "\n" + "\n".join(
+                "  %s:  %s" % (label, url) for label, url in self._web_urls)
+        else:
+            hint = _("Handy-Eingabe nicht verfügbar")
         self["explain"] = Label(_(
             "Deine Line ist AES-256-verschlüsselt gespeichert.\n"
             "Gib dein Sicherheits-Passwort ein, um sie zu entsperren.\n"
