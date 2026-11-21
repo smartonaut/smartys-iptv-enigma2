@@ -38,7 +38,10 @@ def _skin(name, footer, qr=False):
         qr_widget = (
             '<widget name="qr" position="%d,%d" size="%d,%d" scale="1" '
             'zPosition="3" transparent="1" alphatest="blend" />'
-            % (theme.scale(48), theme.scale_y(400), theme.scale(160), theme.scale_y(160))
+            '<widget name="qr2" position="%d,%d" size="%d,%d" scale="1" '
+            'zPosition="3" transparent="1" alphatest="blend" />'
+            % (theme.scale(48), theme.scale_y(400), theme.scale(160), theme.scale_y(160),
+               theme.scale(240), theme.scale_y(400), theme.scale(160), theme.scale_y(160))
         )
         config_h = 60
     else:
@@ -110,6 +113,7 @@ class UnlockScreen(ConfigListScreen, Screen):
         self["header"] = Label(_("Entsperren"))
         self["subtitle"] = Label(_("Sicherheits-Passwort"))
         self["qr"] = Pixmap()
+        self["qr2"] = Pixmap()
         self["status"] = Label(_(""))
 
         # Handy-Eingabe: lokalen Web-Server starten + QR für die URL laden.
@@ -199,17 +203,19 @@ class UnlockScreen(ConfigListScreen, Screen):
         self.close()
 
     def _load_unlock_qr(self):
-        """Erzeugt den QR (Handy-Scan-URL) lokal und zeigt ihn an."""
-        if not self._web_url:
+        """Erzeugt beide QRs (LAN + VPN) lokal und zeigt sie an."""
+        if not self._web_urls:
             return
-        qr_path = "/tmp/smartys_unlock_qr.png"
         try:
             from . import qr as qrgen
-            if not qrgen.make_png(self._web_url, qr_path):
-                return
-            pix = LoadPixmap(qr_path)
-            if pix:
-                self["qr"].instance.setPixmap(pix)
+            for idx, (_label, url) in enumerate(self._web_urls[:2]):
+                name = "qr" if idx == 0 else "qr2"
+                qr_path = "/tmp/smartys_unlock_qr_%d.png" % idx
+                if not qrgen.make_png(url, qr_path):
+                    continue
+                pix = LoadPixmap(qr_path)
+                if pix:
+                    self[name].instance.setPixmap(pix)
         except Exception:
             pass
 
