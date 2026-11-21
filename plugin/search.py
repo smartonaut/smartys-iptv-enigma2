@@ -209,34 +209,54 @@ class SearchScreen(Screen):
 
         # --- Sender, nur eingeblendete Gruppen -------------------------
         try:
-            versteckt = set(self.cfg.get("hidden_categories_live", []) or [])
-            gruppen = self.api.live_categories() or []
-            sichtbar = [g for g in gruppen
-                        if g.get("category_name") not in versteckt]
-            if not sichtbar:
-                # Nichts eingeblendet -> lieber alles als gar nichts.
-                sichtbar = gruppen
-            for g in sichtbar:
-                gname = g.get("category_name", "")
-                try:
-                    streams = self.api.live_streams(g.get("category_id")) or []
-                except Exception:
-                    continue
-                for st in streams:
-                    st["_gruppe"] = gname
-                self._bg_live.extend(streams)
+            self._bg_live = self._lade_gefiltert(
+                "live", self.api.live_categories, self.api.live_streams)
         except Exception:
-            pass
+            self._bg_live = []
 
         try:
-            self._bg_movies = self.api.vod_streams() or []
+            self._bg_movies = self._lade_gefiltert(
+                "vod", self.api.vod_categories, self.api.vod_streams)
         except Exception:
             self._bg_movies = []
         try:
-            self._bg_series = self.api.series_streams() or []
+            self._bg_series = self._lade_gefiltert(
+                "series", self.api.series_categories, self.api.series_streams)
         except Exception:
             self._bg_series = []
         self._bg_fertig = True
+
+    def _lade_gefiltert(self, bereich, hole_gruppen, hole_eintraege):
+        """Eintraege nur aus den eingeblendeten Gruppen eines Bereichs.
+
+        Filme und Serien kamen vorher ungefiltert aus allen Kategorien —
+        bei einer Line mit |DE|/|EN|/|FR|/... -Paketen liefert die Suche
+        nach 'lupin' dann jede Sprachfassung statt nur die eigenen.
+        Ist im Bereich nichts ausgeblendet, wird in einem Zug alles geladen
+        (deutlich schneller als ein Request je Gruppe).
+        """
+        versteckt = set(self.cfg.get("hidden_categories_%s" % bereich, []) or [])
+        if not versteckt:
+            return hole_eintraege() or []
+        try:
+            gruppen = hole_gruppen() or []
+        except Exception:
+            return hole_eintraege() or []
+        sichtbar = [g for g in gruppen
+                    if g.get("category_name") not in versteckt]
+        if not sichtbar:
+            # Alles ausgeblendet -> lieber alles als eine leere Suche.
+            return hole_eintraege() or []
+        ergebnis = []
+        for g in sichtbar:
+            try:
+                teile = hole_eintraege(g.get("category_id")) or []
+            except Exception:
+                continue
+            for x in teile:
+                x.setdefault("_gruppe", g.get("category_name", ""))
+            ergebnis.extend(teile)
+        return ergebnis
 
     def _status_normal(self):
         if not self._bg_fertig:
