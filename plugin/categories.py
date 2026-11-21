@@ -249,6 +249,15 @@ class CategoryListScreen(Screen):
         name = sel[0]
         if name.startswith("- "):
             name = name[2:]   # Marker der ausgeblendeten Sektion
+        # POSITION merken, nicht den Namen: die eingeblendete Gruppe wandert
+        # nach oben in die sichtbare Liste, die ausgeblendete nach unten in
+        # die "- "-Sektion. Wuerde der Cursor dem Namen folgen, springt er
+        # bei jedem GELB an den Anfang und man muss sich zurueckscrollen.
+        # Auf demselben Index bleibt dagegen der naechste Kandidat stehen.
+        try:
+            pos = self["list"].getCurrentIndex()
+        except Exception:
+            pos = 0
         versteckt = self._hidden()
         if name in versteckt:
             versteckt.remove(name)
@@ -259,9 +268,34 @@ class CategoryListScreen(Screen):
             self._set_hidden(versteckt)
             self["status"].setText(_("\u201e%s\u201c ausgeblendet") % name)
         self._load()
-        # Cursor auf der Gruppe halten: sonst springt die Liste bei jedem
-        # Ein-/Ausblenden nach oben und man sucht sich neu.
-        self._springe_zu(name)
+        self._nach_index(pos)
+
+    def _nach_index(self, pos):
+        """Cursor auf eine Listenposition setzen (nicht auf einen Namen)."""
+        try:
+            anzahl = len(self["list"].getList() or [])
+        except Exception:
+            return
+        if anzahl <= 0:
+            return
+        ziel = min(max(0, pos), anzahl - 1)
+        for aufruf in (
+            lambda: self["list"].moveToIndex(ziel),
+            lambda: self["list"].setCurrentIndex(ziel),
+            lambda: self["list"].instance.moveToIndex(ziel),
+        ):
+            try:
+                aufruf()
+                break
+            except Exception:
+                continue
+        try:
+            self["list"].setTopIndex(max(0, ziel - 5))
+        except Exception:
+            try:
+                self["list"].instance.setTopIndex(max(0, ziel - 5))
+            except Exception:
+                pass
 
     def _hide_all(self):
         """BLAU bei sichtbaren Gruppen: ALLE ausblenden.
@@ -273,14 +307,13 @@ class CategoryListScreen(Screen):
         namen = [c.get("category_name", "?") for c in self._alle]
         if not namen:
             return
-        sel = self["list"].getCurrent()
-        merken = sel[0] if sel and isinstance(sel[0], str) else None
-        if merken and merken.startswith("- "):
-            merken = merken[2:]
+        try:
+            pos = self["list"].getCurrentIndex()
+        except Exception:
+            pos = 0
         self._set_hidden(namen)
         self._load()
-        if merken:
-            self._springe_zu(merken)
+        self._nach_index(pos)
         self["status"].setText(
             _("%d Gruppen ausgeblendet — GELB holt einzelne zurück") % len(namen))
 
