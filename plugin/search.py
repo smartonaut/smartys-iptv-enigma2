@@ -125,6 +125,12 @@ class SearchScreen(Screen):
 
         # Handy-Eingabe (Text-Modus) + QR.
         self._web_url = None
+        # Timer fuer die Tastatur (siehe _start).
+        self._kb_timer = eTimer()
+        try:
+            self._kb_timer.callback.append(self.open_keyboard)
+        except Exception:
+            self._kb_timer.timeout.connect(self.open_keyboard)
         self._web_timer = eTimer()
         try:
             self._web_timer.callback.append(self._web_poll)
@@ -150,7 +156,11 @@ class SearchScreen(Screen):
     def _start(self):
         """Beim Oeffnen: Tastatur zeigen und Daten im Hintergrund laden."""
         threading.Thread(target=self._preload, daemon=True).start()
-        self.open_keyboard()
+        # Die Tastatur darf NICHT direkt aus onLayoutFinish geoeffnet werden:
+        # zu dem Zeitpunkt ist der Dialog noch nicht fertig aufgebaut und
+        # Enigma2 wirft "Modal open are allowed only from a screen which is
+        # modal!". Ein kurzer Timer loest das sauber.
+        self._kb_timer.start(400, True)
 
     def open_keyboard(self):
         """Fernbedienung: Suchbegriff ueber die Enigma2-Tastatur eingeben."""
