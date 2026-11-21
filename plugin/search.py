@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Smartys IPTV — Suche über Filme + Serien (Handy-Texteingabe via QR).
+"""Smartys IPTV — Suche über Filme + Serien.
 
-Handy-Scan → Suchbegriff übers Handy eingeben → Treffer erscheinen sofort.
+Zwei Wege, denselben Suchbegriff einzugeben:
+  * Fernbedienung: GRUEN oeffnet die Enigma2-Tastatur (VirtualKeyBoard).
+  * Handy: QR-Code scannen, Begriff im Browser tippen — praktisch bei
+    langen Titeln, weil T9 auf der Fernbedienung elend ist.
 Gleiche Such-Semantik wie die Desktop-Version: case-insensitive Substring
 auf dem Namen, reines lokales Filtern, Treffer-Kappe.
 """
 
 import os
+import threading
 import urllib.parse
 import urllib.request
 
 from Screens.Screen import Screen
+from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 from Components.MenuList import MenuList
@@ -33,8 +38,17 @@ class SearchScreen(Screen):
         self.api = _build_api(cfg)
         self._movies = []
         self._series = []
+        self._live = []
         self._loaded = False
         self._pending_query = None
+        # Hintergrund-Laden: der Abruf von vod_streams()/series_streams()
+        # kann bei grossen Lines dauern und darf den Bildschirm nicht
+        # einfrieren (sonst ist die Tastatur nicht bedienbar).
+        self._bg_fertig = False
+        self._bg_movies = []
+        self._bg_series = []
+        self._bg_live = []
+        self._bg_fehler = None
 
         self.skin = (
             '<screen name="SmartysSearch" position="0,0" size="%d,%d" '
@@ -62,9 +76,7 @@ class SearchScreen(Screen):
             '<widget name="status" position="%d,%d" size="%d,%d" '
             'font="Regular;%d" foregroundColor="%s" halign="center" '
             'valign="center" transparent="1" zPosition="2"/>'
-            '<eLabel text="%s" position="%d,%d" size="%d,%d" '
-            'font="Regular;%d" foregroundColor="%s" halign="left" '
-            'valign="center" transparent="1" zPosition="2"/>'
+            '%s'
             '</screen>' % (
                 w, h, theme.BG,
                 bg, w, h,
@@ -86,10 +98,13 @@ class SearchScreen(Screen):
                 # Status
                 theme.scale(48), theme.scale_y(620), theme.scale(1184),
                 theme.scale_y(30), theme.font(16), theme.MUTED,
-                # Footer
-                "OK = Öffnen   ·   EXIT = Zurück",
-                theme.scale(48), theme.scale_y(678), theme.scale(1184),
-                theme.scale_y(30), theme.font(15), theme.MUTED,
+                theme.tastenleiste([
+                    (theme.TASTE_GRUEN, "GRÜN", "Eingabe"),
+                    (theme.TASTE_GELB, "GELB", "Löschen"),
+                    (theme.TASTE_BLAU, "BLAU", "Handy"),
+                    (None, "OK", "Öffnen"),
+                    (None, "EXIT", "Zurück"),
+                ]),
             ))
 
         Screen.__init__(self, session)
@@ -100,8 +115,13 @@ class SearchScreen(Screen):
         self["qr"] = Pixmap()
         self["status"] = Label(_("Lade …"))
         self["actions"] = ActionMap(
-            ["OkCancelActions"],
-            {"ok": self.on_select, "cancel": self.close})
+            ["OkCancelActions", "ColorActions", "SearchActions"],
+            {"ok": self.on_select,
+             "cancel": self.close,
+             "green": self.open_keyboard,
+             "yellow": self.clear_search,
+             "blue": self.show_handy},
+            -1)
 
         # Handy-Eingabe (Text-Modus) + QR.
         self._web_url = None
@@ -124,27 +144,101 @@ class SearchScreen(Screen):
         except Exception:
             self._web_url = None
         self.onClose.append(self._web_close)
-        self.onLayoutFinish.append(self._preload)
+        self._query = ""
+        self.onLayoutFinish.append(self._start)
+
+    def _start(self):
+        """Beim Oeffnen: Tastatur zeigen und Daten im Hintergrund laden."""
+        threading.Thread(target=self._preload, daemon=True).start()
+        self.open_keyboard()
+
+    def open_keyboard(self):
+        """Fernbedienung: Suchbegriff ueber die Enigma2-Tastatur eingeben."""
+        def fertig(text):
+            text = (text or "").strip()
+            if not text:
+                return
+            self._query = text
+            self["subtitle"].setText(
+                _("Filme + Serien durchsuchen — „%s“") % text)
+            self._run_search(text)
+        self.session.openWithCallback(fertig, VirtualKeyBoard,
+                                      text=self._query,
+                                      title=_("Suchbegriff"))
+
+    def clear_search(self):
+        """GELB: Suchbegriff und Trefferliste leeren."""
+        self._query = ""
+        self["list"].setList([])
+        self["subtitle"].setText(_("Filme + Serien durchsuchen"))
+        self._status_normal()
+
+    def show_handy(self):
+        """BLAU: Adresse fuer die Handy-Eingabe in den Status holen."""
+        if self._web_url:
+            self["status"].setText(
+                _("Am Handy öffnen: %s") % self._web_url)
+        else:
+            self["status"].setText(
+                _("Handy-Eingabe nicht verfügbar — nutze GRÜN"))
 
     def _preload(self):
-        """Lädt Filme + Serien einmalig (für die lokale Suche)."""
+        """Laedt Sender, Filme + Serien (laeuft im Hintergrund-Thread).
+
+        Sender nur aus den EINGEBLENDETEN Gruppen: bei einer Testline mit
+        hunderten Gruppen waere eine Suche ueber alles unbrauchbar — was man
+        ausgeblendet hat, will man auch nicht in den Treffern sehen.
+        """
         if self._loaded:
             return
         self._loaded = True
         if not self.api:
-            self["status"].setText(_("Nicht verbunden"))
+            self._bg_fehler = _("Nicht verbunden")
+            self._bg_fertig = True
             return
+
+        # --- Sender, nur eingeblendete Gruppen -------------------------
         try:
-            self._movies = self.api.vod_streams() or []
+            versteckt = set(self.cfg.get("hidden_categories_live", []) or [])
+            gruppen = self.api.live_categories() or []
+            sichtbar = [g for g in gruppen
+                        if g.get("category_name") not in versteckt]
+            if not sichtbar:
+                # Nichts eingeblendet -> lieber alles als gar nichts.
+                sichtbar = gruppen
+            for g in sichtbar:
+                gname = g.get("category_name", "")
+                try:
+                    streams = self.api.live_streams(g.get("category_id")) or []
+                except Exception:
+                    continue
+                for st in streams:
+                    st["_gruppe"] = gname
+                self._bg_live.extend(streams)
         except Exception:
-            self._movies = []
+            pass
+
         try:
-            self._series = self.api.series_streams() or []
+            self._bg_movies = self.api.vod_streams() or []
         except Exception:
-            self._series = []
+            self._bg_movies = []
+        try:
+            self._bg_series = self.api.series_streams() or []
+        except Exception:
+            self._bg_series = []
+        self._bg_fertig = True
+
+    def _status_normal(self):
+        if not self._bg_fertig:
+            self["status"].setText(_("Lade Filme und Serien …"))
+            return
+        if self._bg_fehler:
+            self["status"].setText(str(self._bg_fehler))
+            return
         self["status"].setText(
-            _("%d Filme · %d Serien — Suchbegriff übers Handy (%s)")
-            % (len(self._movies), len(self._series), self._web_url or "—"))
+            _("%d Sender · %d Filme · %d Serien — GRÜN für Eingabe, Handy: %s")
+            % (len(self._live), len(self._movies), len(self._series),
+               self._web_url or "—"))
 
     def _web_receive(self, text):
         # Läuft im Server-Thread — nur Variable setzen, UI-Update im Poll.
@@ -152,17 +246,40 @@ class SearchScreen(Screen):
         return True
 
     def _web_poll(self):
-        # MainThread: ausstehenden Suchtext verarbeiten.
+        # MainThread: ausstehenden Suchtext verarbeiten und Hintergrund-Laden
+        # uebernehmen (der Thread setzt nur Variablen, die UI liest sie hier).
+        if self._bg_fertig and self._movies is not self._bg_movies:
+            self._movies = self._bg_movies
+            self._series = self._bg_series
+            self._live = self._bg_live
+            if not self._query:
+                self._status_normal()
         if self._pending_query is not None:
             q = self._pending_query
             self._pending_query = None
+            self._query = (q or "").strip()
             self._run_search(q)
 
     def _run_search(self, query):
         q = (query or "").strip().lower()
         if not q:
             return
+        if not self._bg_fertig:
+            self["status"].setText(
+                _("Filme und Serien werden noch geladen — gleich nochmal"))
+            self._pending_query = query
+            return
+        if self._movies is not self._bg_movies:
+            self._movies = self._bg_movies
+            self._series = self._bg_series
+            self._live = self._bg_live
         results = []
+        for st in self._live:
+            name = st.get("name", "") or ""
+            if q in name.lower():
+                gruppe = st.get("_gruppe", "")
+                label = name if not gruppe else "%s  (%s)" % (name, gruppe)
+                results.append(("[Sender] " + label, ("live", st)))
         for m in self._movies:
             if q in (m.get("name", "") or "").lower():
                 results.append(("[Film]  " + m.get("name", "?"), ("movie", m)))
@@ -179,6 +296,15 @@ class SearchScreen(Screen):
         if not sel or not sel[1]:
             return
         kind, item = sel[1]
+        if kind == "live":
+            from . import vlc_player
+            url = self.api.creds.stream_url(item.get("stream_id"), "ts")
+            vlc_player.open_player(self.session, url,
+                                   name=item.get("name", ""),
+                                   stream_id=item.get("stream_id"),
+                                   api=self.api,
+                                   stream_icon=item.get("stream_icon", ""))
+            return
         if kind == "movie":
             from .voddetail import VodDetailScreen
             self.session.open(VodDetailScreen, self.api, item.get("stream_id"),
